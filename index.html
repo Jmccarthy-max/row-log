@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a1430">
+<title>Row Log</title>
+<style>
+  :root{
+    /* OARS — Orlando Area Rowing Society palette: navy / orange / gold */
+    --bg:#0a1430; --bg2:#111d3f; --card:#152549; --card2:#1c2f59;
+    --line:#28407a; --text:#f2f5fc; --muted:#93a5cd; --dim:#61759f;
+    --accent:#f37b21; --accent2:#fccd22; --good:#34d399; --water:#38bdf8;
+    --food:#fccd22; --row:#f37b21; --danger:#f87171;
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-t: env(safe-area-inset-top, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    overscroll-behavior-y:none;}
+  body{min-height:100vh;}
+  button{font-family:inherit;cursor:pointer;border:none;color:inherit;}
+  input,select,textarea{font-family:inherit;font-size:16px;}
+
+  /* ---------- App shell ---------- */
+  #app{max-width:520px;margin:0 auto;padding-top:var(--safe-t);}
+  header.top{
+    position:sticky;top:0;z-index:20;
+    background:linear-gradient(180deg,var(--bg) 60%,rgba(10,20,48,.85));
+    padding:calc(var(--safe-t) + 14px) 18px 12px;
+    display:flex;align-items:center;justify-content:space-between;
+    backdrop-filter:blur(8px);
+  }
+  header.top h1{font-size:20px;margin:0;letter-spacing:.3px;font-weight:800;}
+  header.top .date{font-size:13px;color:var(--muted);margin-top:2px;}
+  header.top .logo-img{height:46px;width:auto;background:#fff;border-radius:12px;
+    padding:4px 7px;box-shadow:0 2px 10px rgba(0,0,0,.35);}
+  main{padding:4px 16px calc(96px + var(--safe-b));min-height:60vh;}
+
+  .view{display:none;animation:fade .25s ease;}
+  .view.active{display:block;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* ---------- Cards / bits ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:16px;margin-bottom:14px;}
+  .card h2{margin:0 0 12px;font-size:15px;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.7px;font-weight:700;}
+  .row-between{display:flex;align-items:center;justify-content:space-between;}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;
+    border-radius:999px;letter-spacing:.4px;text-transform:uppercase;}
+  .muted{color:var(--muted);}
+  .big{font-size:34px;font-weight:800;line-height:1;}
+  .unit{font-size:14px;color:var(--muted);font-weight:600;}
+
+  /* ---------- Home summary ring row ---------- */
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:15px;position:relative;overflow:hidden;}
+  .stat .lbl{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+  .stat .val{font-size:26px;font-weight:800;margin-top:6px;}
+  .stat .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .stat .ic{position:absolute;top:12px;right:14px;font-size:20px;opacity:.9;}
+
+  /* ---------- Water tracker ---------- */
+  .water-wrap{display:flex;align-items:center;gap:16px;}
+  .water-ring{width:96px;height:96px;flex:none;position:relative;}
+  .water-ring svg{transform:rotate(-90deg);}
+  .water-ring .c-track{stroke:var(--bg2);}
+  .water-ring .c-fill{stroke:var(--water);stroke-linecap:round;
+    transition:stroke-dashoffset .5s ease;}
+  .water-ring .center{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;}
+  .water-ring .center .n{font-size:22px;font-weight:800;}
+  .water-ring .center .g{font-size:11px;color:var(--muted);}
+  .cups{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;}
+  .cup{width:34px;height:62px;border-radius:8px 8px 11px 11px;border:2px solid var(--water);
+    background:transparent;position:relative;transition:.2s;}
+  .cup::before{content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+    width:16px;height:6px;border-radius:3px 3px 0 0;background:var(--water);opacity:.55;}
+  .cup.full{background:var(--water);box-shadow:0 3px 10px rgba(56,189,248,.35);}
+  .cup.full::before{opacity:1;}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#fff;font-weight:700;font-size:16px;
+    padding:14px;border-radius:14px;width:100%;}
+  .btn:active{transform:scale(.98);}
+  .btn.ghost{background:var(--card2);border:1px solid var(--line);}
+  .btn.water{background:var(--water);color:#04283b;}
+  .btn.food{background:var(--food);color:#3a2c00;}
+  .btn.row{background:var(--row);color:#fff;}
+  .btn.small{padding:10px 14px;font-size:14px;width:auto;}
+  .btn-row{display:flex;gap:10px;}
+
+  /* ---------- List entries ---------- */
+  .entry{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .entry:last-child{border-bottom:none;}
+  .entry .ico{width:40px;height:40px;flex:none;border-radius:12px;display:flex;
+    align-items:center;justify-content:center;font-size:19px;background:var(--card2);}
+  .entry .body{flex:1;min-width:0;}
+  .entry .body .t{font-weight:700;font-size:15px;}
+  .entry .body .d{font-size:13px;color:var(--muted);margin-top:2px;}
+  .entry .body .tags{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;}
+  .entry .del{color:var(--dim);font-size:20px;background:none;padding:4px 6px;align-self:flex-start;}
+  .empty{text-align:center;color:var(--muted);padding:26px 10px;font-size:14px;}
+  .empty .em{font-size:34px;display:block;margin-bottom:8px;}
+
+  /* ---------- Segmented ---------- */
+  .seg{display:flex;background:var(--bg2);border-radius:12px;padding:4px;margin-bottom:14px;}
+  .seg button{flex:1;padding:9px;border-radius:9px;font-weight:700;font-size:14px;
+    color:var(--muted);background:none;transition:.15s;}
+  .seg button.on{background:var(--card2);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.3);}
+
+  /* ---------- Forms / modal ---------- */
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:12px;color:var(--muted);font-weight:700;
+    margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;}
+  .field input,.field select,.field textarea{width:100%;background:var(--bg2);
+    border:1px solid var(--line);border-radius:12px;padding:13px;color:var(--text);}
+  .field textarea{min-height:70px;resize:vertical;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{padding:9px 14px;border-radius:999px;background:var(--bg2);border:1px solid var(--line);
+    font-size:14px;font-weight:600;color:var(--muted);}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:#fff;}
+
+  .modal-bg{position:fixed;inset:0;background:rgba(4,8,16,.6);z-index:50;display:none;
+    backdrop-filter:blur(3px);}
+  .modal-bg.show{display:block;}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;max-width:520px;margin:0 auto;
+    background:var(--bg2);border-radius:22px 22px 0 0;border-top:1px solid var(--line);
+    padding:8px 18px calc(20px + var(--safe-b));transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto;}
+  .sheet.show{transform:translateY(0);}
+  .sheet .grip{width:40px;height:5px;background:var(--line);border-radius:3px;margin:8px auto 14px;}
+  .sheet h3{margin:0 0 16px;font-size:19px;}
+
+  /* ---------- Tips ---------- */
+  .search{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:14px;
+    padding:13px 14px 13px 40px;color:var(--text);margin-bottom:12px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='none' stroke='%238fa3c4' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:13px center;}
+  .tip{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:14px 16px;margin-bottom:11px;}
+  .tip .th{display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+  .tip .th .e{font-size:20px;}
+  .tip .th .tt{font-weight:700;font-size:15px;flex:1;}
+  .tip .body{font-size:14px;color:#cdd8ec;line-height:1.5;}
+  .cat-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:4px;
+    -webkit-overflow-scrolling:touch;}
+  .cat-row::-webkit-scrollbar{display:none;}
+  .cat{flex:none;padding:8px 14px;border-radius:999px;background:var(--bg2);
+    border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--muted);white-space:nowrap;}
+  .cat.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+  /* ---------- Tab bar ---------- */
+  nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:30;max-width:520px;margin:0 auto;
+    background:rgba(13,24,55,.94);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);display:flex;
+    padding:8px 6px calc(8px + var(--safe-b));}
+  nav.tabs button{flex:1;background:none;display:flex;flex-direction:column;align-items:center;
+    gap:3px;color:var(--dim);font-size:10.5px;font-weight:700;padding:4px 0;}
+  nav.tabs button .i{font-size:21px;line-height:1;}
+  nav.tabs button.on{color:var(--accent2);}
+
+  .section-title{font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;
+    letter-spacing:.6px;margin:20px 2px 10px;}
+  .fab-note{font-size:12px;color:var(--dim);text-align:center;margin-top:2px;}
+
+  /* ---------- Progress chart ---------- */
+  .prog-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-bottom:14px;}
+  .prog-stat{background:var(--bg2);border:1px solid var(--line);border-radius:12px;
+    padding:10px 8px;text-align:center;}
+  .prog-stat .l{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;}
+  .prog-stat .v{font-size:17px;font-weight:800;margin-top:3px;}
+  .prog-stat.pr .v{color:var(--accent2);}
+  #progChart svg{width:100%;height:auto;display:block;}
+
+  /* ---------- Lift ---------- */
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:13px 14px;margin-bottom:10px;transition:.2s;}
+  .ex.done{border-color:var(--good);background:rgba(52,211,153,.07);}
+  .ex .top{display:flex;align-items:flex-start;gap:12px;}
+  .ex .chk{width:28px;height:28px;flex:none;border-radius:9px;border:2px solid var(--line);
+    background:var(--bg2);display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:transparent;margin-top:1px;}
+  .ex.done .chk{background:var(--good);border-color:var(--good);color:#04321f;}
+  .ex .nm{font-weight:700;font-size:15px;flex:1;}
+  .ex .vid{flex:none;width:36px;height:36px;border-radius:11px;background:var(--card2);
+    border:1px solid var(--line);color:var(--accent);font-size:13px;
+    display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  .ex .ss{font-size:12.5px;color:var(--accent);font-weight:600;margin-top:3px;}
+  .ex .fn{font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.45;}
+  .ex .log{display:flex;gap:8px;margin-top:10px;margin-left:40px;}
+  .ex .log input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);
+    border-radius:10px;padding:9px 11px;color:var(--text);font-size:14px;}
+  .lift-scheme{background:var(--card2);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--muted);font-weight:600;
+    display:flex;justify-content:space-between;align-items:center;gap:8px;}
+
+  /* ---------- Race fuel accordion ---------- */
+  details.rf{border:1px solid var(--line);border-radius:12px;background:var(--bg2);
+    margin-bottom:9px;overflow:hidden;}
+  details.rf summary{padding:12px 13px;font-weight:700;font-size:14px;cursor:pointer;
+    list-style:none;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  details.rf summary::-webkit-details-marker{display:none;}
+  details.rf summary::after{content:'+';color:var(--accent);font-size:18px;font-weight:800;flex:none;}
+  details.rf[open] summary::after{content:'–';}
+  details.rf .bd{padding:0 13px 13px;font-size:13.5px;color:#cdd8ec;line-height:1.55;}
+  details.rf .bd ul{margin:6px 0 0;padding-left:19px;}
+  details.rf .bd li{margin-bottom:5px;}
+  details.rf .bd b{color:var(--text);}
+
+  /* ---------- Photos ---------- */
+  .photo-thumb{width:100%;max-height:150px;object-fit:cover;border-radius:10px;
+    margin-top:8px;border:1px solid var(--line);display:block;cursor:pointer;}
+  #photoPreviewWrap{display:none;margin-top:10px;position:relative;}
+  #photoPreview{width:100%;border-radius:12px;display:block;border:1px solid var(--line);}
+  #photoPreviewWrap .rm{position:absolute;top:8px;right:8px;width:32px;height:32px;
+    border-radius:999px;background:rgba(4,8,18,.75);color:#fff;font-size:18px;line-height:1;}
+  #photoViewer{position:fixed;inset:0;z-index:120;background:rgba(4,8,18,.93);
+    display:none;align-items:center;justify-content:center;padding:18px;}
+  #photoViewer.show{display:flex;}
+  #photoViewer img{max-width:100%;max-height:88vh;border-radius:12px;}
+  #photoViewer .hint{position:absolute;bottom:calc(24px + var(--safe-b));left:0;right:0;
+    text-align:center;color:var(--muted);font-size:13px;}
+
+  /* ---------- Toast ---------- */
+  #toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%) translateY(20px);
+    background:var(--accent2);color:#3a2c00;font-weight:800;font-size:15px;
+    padding:13px 22px;border-radius:999px;z-index:100;opacity:0;pointer-events:none;
+    transition:.35s cubic-bezier(.2,.8,.2,1);box-shadow:0 8px 30px rgba(252,205,34,.4);white-space:nowrap;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div>
+      <h1 id="greeting">Row Log</h1>
+      <div class="date" id="todayDate"></div>
+    </div>
+    <img class="logo-img" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAH0AAACWCAYAAADzA4dkAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAHWlUWHRTb2Z0d2FyZQAAAAAAQWRvYmUgSW1hZ2VSZWFkeQatApcAAAOJaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8P3hwYWNrZXQgYmVnaW49Iu+7vyIgaWQ9Ilc1TTBNcENlaGlIenJlU3pOVGN6a2M5ZCI/PiA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJBZG9iZSBYTVAgQ29yZSA5LjEtYzAwMiA3OS5hMWNkMTJmNDEsIDIwMjQvMTEvMDgtMTY6MDk6MjAgICAgICAgICI+IDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+IDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiIHhtbG5zOnhtcE1NPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvbW0vIiB4bWxuczpzdFJlZj0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL3NUeXBlL1Jlc291cmNlUmVmIyIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bXBNTTpPcmlnaW5hbERvY3VtZW50SUQ9InhtcC5kaWQ6NWE0YjQwOTYtMmM3NS00ZDBmLThjZjItMTA1ZWFkNWRiMTg2IiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkUwQTg2OUZGOTBCQjExRjBBREMwRERBMTJFQ0Q3QjBCIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkUwQTg2OUZFOTBCQjExRjBBREMwRERBMTJFQ0Q3QjBCIiB4bXA6Q3JlYXRvclRvb2w9IkFkb2JlIFBob3Rvc2hvcCBDQyAyMDE5IChNYWNpbnRvc2gpIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6NzcxZWM4ODQtN2Y0Ni00Y2EwLWI3ZTItYzViZGQ4NTE5Yjg0IiBzdFJlZjpkb2N1bWVudElEPSJhZG9iZTpkb2NpZDpwaG90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" alt="OARS logo">
+  </header>
+
+  <main>
+    <!-- ============ HOME ============ -->
+    <section class="view active" id="view-home">
+      <div class="card" id="seasonBanner" style="padding:13px 16px;"></div>
+      <div class="card" id="quoteCard" style="padding:13px 16px;cursor:pointer;" onclick="nextQuote()"></div>
+      <div class="stat-grid" style="margin-bottom:14px;">
+        <div class="stat">
+          <span class="ic">🚣</span>
+          <div class="lbl">Rowing</div>
+          <div class="val" id="h-row-meters">0<span class="unit"> m</span></div>
+          <div class="sub" id="h-row-sub">No rows today</div>
+        </div>
+        <div class="stat">
+          <span class="ic">🔥</span>
+          <div class="lbl">Fuel</div>
+          <div class="val" id="h-food-count">0</div>
+          <div class="sub" id="h-food-sub">meals logged</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-between" style="margin-bottom:6px;">
+          <h2 style="margin:0;">Water today</h2>
+          <button class="btn ghost small" onclick="openWaterGoal()">Goal ⚙️</button>
+        </div>
+        <div class="water-wrap">
+          <div class="water-ring">
+            <svg width="96" height="96" viewBox="0 0 96 96">
+              <circle class="c-track" cx="48" cy="48" r="42" fill="none" stroke-width="9"/>
+              <circle class="c-fill" id="waterArc" cx="48" cy="48" r="42" fill="none" stroke-width="9"
+                stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+            </svg>
+            <div class="center">
+              <div class="n" id="waterCups">0</div>
+              <div class="g" id="waterGoalLbl">/ 3 bottles</div>
+            </div>
+          </div>
+          <div style="flex:1;">
+            <div class="btn-row">
+              <button class="btn water" onclick="addWater(1)">+ 1 bottle 💧</button>
+              <button class="btn ghost small" onclick="addWater(-1)">–</button>
+            </div>
+            <div class="fab-note" id="waterHint">Tap when you finish a bottle</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">Quick add</div>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button class="btn row" onclick="openRow()">🚣 Row</button>
+        <button class="btn food" onclick="openFood()">🍽️ Food</button>
+      </div>
+
+      <div class="section-title">Today's activity</div>
+      <div class="card" id="homeFeed"></div>
+    </section>
+
+    <!-- ============ ROWING ============ -->
+    <section class="view" id="view-row">
+      <div class="card" style="text-align:center;">
+        <h2>This week on the water</h2>
+        <div class="big" id="weekMeters">0<span class="unit"> m</span></div>
+        <div class="muted" id="weekRowSub" style="margin-top:6px;">0 sessions</div>
+      </div>
+      <div class="card" id="progressCard">
+        <div class="row-between" style="margin-bottom:10px;">
+          <h2 style="margin:0;">Split progress</h2>
+          <span class="pill" style="background:var(--card2);color:var(--muted);">lower = faster</span>
+        </div>
+        <div class="chips" id="progDistChips" style="margin-bottom:14px;"></div>
+        <div id="progStats"></div>
+        <div id="progChart"></div>
+      </div>
+      <div class="card" id="seasonWorkouts"></div>
+      <button class="btn row" onclick="openRow()" style="margin-bottom:16px;">+ Log a row</button>
+      <div class="section-title">History</div>
+      <div id="rowList"></div>
+    </section>
+
+    <!-- ============ LIFT ============ -->
+    <section class="view" id="view-lift">
+      <div class="card">
+        <div class="row-between">
+          <h2 style="margin:0;">Coach Jenn's 3-Day Split</h2>
+          <span class="pill" id="liftDonePill" style="background:var(--card2);color:var(--accent2);">0 done</span>
+        </div>
+        <div class="muted" style="font-size:13px;margin-top:8px;line-height:1.45;">
+          Gym 3× per week. Off days: 20 min HIIT or 60 min cardio (2–3 days).
+          Core tight at all times — and don't forget to stretch! 🧘
+        </div>
+        <div id="liftSeasonNote" style="font-size:12.5px;color:var(--accent);margin-top:8px;font-weight:600;"></div>
+        <div style="font-size:12px;color:var(--dim);margin-top:8px;">Workout &amp; form notes from Coach Jenn · OARS Health &amp; Performance</div>
+      </div>
+      <div class="seg" id="liftDaySeg"></div>
+      <div id="liftMeta"></div>
+      <div id="liftList"></div>
+      <div class="section-title">Recent lifts</div>
+      <div id="liftHistory"></div>
+    </section>
+
+    <!-- ============ FOOD ============ -->
+    <section class="view" id="view-food">
+      <button class="btn food" onclick="openFood()" style="margin-bottom:16px;">+ Log food</button>
+
+      <div class="card">
+        <div class="row-between" style="margin-bottom:6px;">
+          <h2 style="margin:0;">Race Week Fuel 🏁</h2>
+          <span class="pill" style="background:var(--card2);color:var(--accent2);">Coach Jenn</span>
+        </div>
+        <div class="muted" style="font-size:13px;line-height:1.5;margin-bottom:12px;">
+          Training fatigue is <b style="color:var(--text);">cumulative</b> — skip meals and by Thursday
+          you're glycogen-depleted, and hard pieces on empty are "NOT a good place to be."
+          Plus: a gallon of water daily.
+        </div>
+
+        <details class="rf">
+          <summary>🛒 Stock the kitchen for race week</summary>
+          <div class="bd">Have these around (her list): sweet potatoes · pasta · quinoa/brown rice ·
+          multigrain bread &amp; wraps · bagels · Greek yogurt + granola · eggs, chicken, fish, lean turkey ·
+          quality lunch meat · cottage cheese · sea-salted almonds &amp; rice cakes · natural nut butter ·
+          hummus &amp; pretzels · bananas · raisins &amp; fruit snacks · veggies · sports drinks.</div>
+        </details>
+
+        <details class="rf">
+          <summary>📅 Mon–Thu · top up the tank</summary>
+          <div class="bd">
+            <ul>
+              <li><b>Breakfast:</b> protein shake (protein + banana + oats + nut butter) or Greek yogurt + granola + berries</li>
+              <li><b>Lunch:</b> turkey or chicken + whole-grain wrap + sweet potato + greens</li>
+              <li><b>Snacks:</b> yogurt &amp; granola · hard-boiled eggs + apple · watermelon · half sandwich</li>
+              <li><b>At practice:</b> sports drink + water</li>
+              <li><b>Post practice:</b> chocolate milk, or protein shake + banana (carb + protein, fast)</li>
+              <li><b>Dinner:</b> fish, chicken or steak + whole-wheat pasta/quinoa/sweet potato + salad or veggies</li>
+              <li><b>Before bed:</b> cottage cheese or nut butter — slow protein that repairs muscles overnight</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="rf">
+          <summary>🏁 Friday · pre-race day</summary>
+          <div class="bd">
+            <ul>
+              <li><b>Breakfast:</b> egg muffins + multigrain toast with peanut butter</li>
+              <li><b>Snacks:</b> yogurt + granola (low-GI carb matters here) · turkey/tuna + sweet potato</li>
+              <li><b>Lunch:</b> chicken salad + whole-grain wrap + fruit</li>
+              <li><b>Dinner out:</b> balanced plate — <b>bigger portion of lower-GI carbs</b>, medium protein, small fat</li>
+              <li><b>Then:</b> "Drink water and GO TO BED."</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="rf">
+          <summary>⏱️ Race day · timing is everything</summary>
+          <div class="bd">
+            <ul>
+              <li><b>Breakfast:</b> balanced, lower-GI carbs — go easy on protein &amp; fat until after racing</li>
+              <li><b>1–2 hrs before:</b> mid/low-GI carbs only</li>
+              <li><b>20 min–1 hr before:</b> high-GI carbs — watermelon, grapes, raisins, honey, banana, sport drink or chews</li>
+              <li><b>Right after racing:</b> high-GI carbs again + a little protein</li>
+              <li><b>2 hrs post:</b> balanced meal</li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="rf">
+          <summary>🍚 High-GI vs low-GI carbs</summary>
+          <div class="bd">
+            <b>High-GI (right before / right after racing):</b> sports drinks, banana, raisins, watermelon,
+            pretzels, white bread/bagel/potato/rice, fruit snacks.<br><br>
+            <b>Low/mid-GI (meals 2+ hrs from racing, with protein &amp; fat):</b> pasta, multigrain
+            bread/wraps, beans, brown rice, apples, pears, sweet potatoes.
+          </div>
+        </details>
+
+        <div style="font-size:12px;color:var(--dim);margin-top:8px;">From Coach Jenn's "Week of Race Nutrition Guideline" · OARS weekly email</div>
+      </div>
+
+      <div class="section-title">Food log</div>
+      <div class="seg" id="foodDaySeg"></div>
+      <div id="foodList"></div>
+    </section>
+
+    <!-- ============ WATER ============ -->
+    <section class="view" id="view-water">
+      <div class="card" style="text-align:center;">
+        <h2>Hydration</h2>
+        <div class="big"><span id="waterCups2">0</span><span class="unit"> / <span id="waterGoal2">3</span> bottles</span></div>
+        <div class="muted" style="margin-top:6px;" id="waterOz">0 oz</div>
+        <div class="cups" id="cupRow" style="justify-content:center;margin-top:16px;"></div>
+        <div class="btn-row" style="margin-top:16px;">
+          <button class="btn water" onclick="addWater(1)">+ 1 bottle 💧</button>
+          <button class="btn ghost small" onclick="addWater(-1)">Undo –</button>
+        </div>
+        <button class="btn ghost small" style="margin:14px auto 0;" onclick="openWaterGoal()">Change goal ⚙️</button>
+      </div>
+      <div class="card">
+        <h2>Coach Jenn says 💧</h2>
+        <div style="font-size:14px;line-height:1.55;color:#cdd8ec;">
+          <b>Not enough fluid</b> is the #1 thing rowers fall short on — exercise dulls your thirst,
+          so don't wait until you feel it.
+          <ul style="margin:10px 0 0;padding-left:20px;">
+            <li style="margin-bottom:7px;"><b>Before practice:</b> ½–1 cup every 20 minutes (about 20 oz per hour) from the time you wake up.</li>
+            <li style="margin-bottom:7px;"><b>At practice:</b> an electrolyte drink (like Body Armor) for the full 2-hour session — sip 30–60g of carbs per hour, don't chug.</li>
+            <li><b>Why it matters:</b> dehydration raises your heart rate, makes the work feel harder, and invites heat illness.</li>
+          </ul>
+        </div>
+        <div style="font-size:12px;color:var(--dim);margin-top:10px;">From Coach Jenn's Health &amp; Performance Corner · OARS weekly update</div>
+      </div>
+      <div class="section-title">Last 7 days</div>
+      <div class="card" id="waterHistory"></div>
+    </section>
+
+    <!-- ============ TIPS ============ -->
+    <section class="view" id="view-tips">
+      <input class="search" id="tipSearch" placeholder="Search tips…" oninput="renderTips()">
+      <div class="cat-row" id="catRow"></div>
+      <div id="tipList"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="on" data-v="home" onclick="go('home')"><span class="i">🏠</span>Today</button>
+    <button data-v="row" onclick="go('row')"><span class="i">🚣</span>Row</button>
+    <button data-v="lift" onclick="go('lift')"><span class="i">🏋️</span>Lift</button>
+    <button data-v="food" onclick="go('food')"><span class="i">🍽️</span>Food</button>
+    <button data-v="water" onclick="go('water')"><span class="i">💧</span>Water</button>
+    <button data-v="tips" onclick="go('tips')"><span class="i">💡</span>Tips</button>
+  </nav>
+</div>
+
+<!-- ============ SHEETS ============ -->
+<div class="modal-bg" id="modalBg" onclick="closeSheet()"></div>
+
+<!-- Row sheet -->
+<div class="sheet" id="rowSheet">
+  <div class="grip"></div>
+  <h3>Log a row 🚣</h3>
+  <div class="seg" style="margin-bottom:16px;">
+    <button id="rt-erg" class="on" onclick="setRowType('erg')">Erg</button>
+    <button id="rt-water" onclick="setRowType('water')">On water</button>
+  </div>
+  <div class="field">
+    <label>Distance (meters)</label>
+    <input type="number" inputmode="numeric" id="r-dist" placeholder="e.g. 2000">
+    <div class="chips" style="margin-top:9px;" id="distChips"></div>
+  </div>
+  <div class="grid2">
+    <div class="field">
+      <label>Time (mm:ss)</label>
+      <input type="text" inputmode="numeric" id="r-time" placeholder="7:30">
+    </div>
+    <div class="field" id="rateField">
+      <label>Stroke rate (spm)</label>
+      <input type="number" inputmode="numeric" id="r-rate" placeholder="24">
+    </div>
+  </div>
+  <div class="field" id="splitRow">
+    <label>Split /500m <span class="muted">(auto)</span></label>
+    <input type="text" id="r-split" placeholder="—" readonly>
+  </div>
+  <div class="field" id="boatField" style="display:none;">
+    <label>Boat</label>
+    <div class="chips" id="boatChips"></div>
+  </div>
+  <div class="field">
+    <label>How did it feel?</label>
+    <div class="chips" id="feelChips"></div>
+  </div>
+  <div class="field">
+    <label>Photo of the monitor <span class="muted">(optional)</span></label>
+    <input type="file" id="r-photo" accept="image/*" style="display:none;" onchange="photoPicked(this)">
+    <button class="btn ghost" type="button" id="photoBtn" onclick="document.getElementById('r-photo').click()">📷 Snap the erg screen</button>
+    <div id="photoPreviewWrap">
+      <img id="photoPreview" alt="monitor photo">
+      <button class="rm" type="button" onclick="clearPhoto()">×</button>
+    </div>
+  </div>
+  <div class="field">
+    <label>Notes</label>
+    <textarea id="r-notes" placeholder="Anything to remember…"></textarea>
+  </div>
+  <button class="btn row" onclick="saveRow()">Save row</button>
+</div>
+
+<!-- Food sheet -->
+<div class="sheet" id="foodSheet">
+  <div class="grip"></div>
+  <h3>Log food 🍽️</h3>
+  <div class="field">
+    <label>Meal</label>
+    <div class="chips" id="mealChips"></div>
+  </div>
+  <div class="field">
+    <label>What did you eat / drink?</label>
+    <textarea id="f-desc" placeholder="e.g. Oatmeal, banana, peanut butter toast"></textarea>
+  </div>
+  <div class="field">
+    <label>Calories <span class="muted">(optional)</span></label>
+    <input type="number" inputmode="numeric" id="f-cal" placeholder="—">
+  </div>
+  <button class="btn food" onclick="saveFood()">Save food</button>
+</div>
+
+<!-- Water goal sheet -->
+<div class="sheet" id="goalSheet">
+  <div class="grip"></div>
+  <h3>Daily water goal 💧</h3>
+  <div class="field">
+    <label>Bottles per day</label>
+    <input type="number" inputmode="numeric" id="g-cups" placeholder="3">
+  </div>
+  <div class="muted" style="font-size:12.5px;line-height:1.5;margin:-4px 0 14px;">
+    Coach Jenn: exercise dulls thirst — most rowers don't drink enough. Aim for ~20 oz/hour
+    before practice. 3 × 32 oz bottles ≈ 96 oz is a good day-to-day floor for FL training.
+  </div>
+  <div class="field">
+    <label>Bottle size (oz)</label>
+    <input type="number" inputmode="numeric" id="g-oz" placeholder="32">
+  </div>
+  <button class="btn water" onclick="saveGoal()">Save goal</button>
+</div>
+
+<script>
+/* =================== STORAGE =================== */
+const DB = {
+  get k(){return 'rowlog_v1';},
+  load(){ try{return JSON.parse(localStorage.getItem(this.k))||{};}catch(e){return {};} },
+  save(d){ localStorage.setItem(this.k, JSON.stringify(d)); },
+};
+let state = Object.assign({
+  rows:[], foods:[], water:{}, // water keyed by date -> bottles
+  lifts:{},                    // lifts keyed by date -> {dayKey:{exIdx:{on,w,r}}}
+  goalCups:3, goalOz:32,       // his bottle is 32 oz — 3 bottles ≈ 96 oz (per Coach Jenn's guidance)
+}, DB.load());
+if(!state.lifts) state.lifts={};
+// migrate old cup-based goals (8 oz cups) to 32 oz bottles
+if(state.goalOz===8 && (state.goalCups===8||state.goalCups===12)){ state.goalCups=3; state.goalOz=32; }
+function persist(){ DB.save(state); }
+
+/* =================== DATE HELPERS =================== */
+function todayKey(d=new Date()){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDay(key){
+  const [y,m,d]=key.split('-').map(Number);
+  const dt=new Date(y,m-1,d);
+  const t=todayKey(), yk=todayKey(new Date(Date.now()-864e5));
+  if(key===t) return 'Today';
+  if(key===yk) return 'Yesterday';
+  return dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+}
+function fmtTime(ts){
+  return new Date(ts).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+}
+const TODAY = todayKey();
+
+/* =================== NAV =================== */
+function go(v){
+  document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  window.scrollTo(0,0);
+  renderAll();
+}
+
+/* =================== SHEETS =================== */
+let openSheetEl=null;
+function showSheet(id){
+  openSheetEl=document.getElementById(id);
+  document.getElementById('modalBg').classList.add('show');
+  requestAnimationFrame(()=>openSheetEl.classList.add('show'));
+}
+function closeSheet(){
+  if(openSheetEl)openSheetEl.classList.remove('show');
+  document.getElementById('modalBg').classList.remove('show');
+  openSheetEl=null;
+}
+
+/* =================== ROW LOGGING =================== */
+let rowType='erg', rowFeel='', rowBoat='8+';
+const DIST_PRESETS=[500,1000,2000,5000,6000];
+const BOATS=['1x','2x','2-','4x','4+','8+'];
+const FEELS=['💪 Strong','😊 Good','😐 Okay','🥵 Tough','😴 Tired'];
+
+function openRow(){
+  rowType='erg'; rowFeel='';
+  setRowType('erg');
+  clearPhoto();
+  ['r-dist','r-time','r-rate','r-split','r-notes'].forEach(i=>document.getElementById(i).value='');
+  renderChips('distChips', DIST_PRESETS.map(d=>({v:d,l:d+'m'})), v=>{document.getElementById('r-dist').value=v;calcSplit();}, null);
+  renderChips('boatChips', BOATS.map(b=>({v:b,l:b})), v=>{rowBoat=v;renderRowChips();}, ()=>rowBoat);
+  renderChips('feelChips', FEELS.map(f=>({v:f,l:f})), v=>{rowFeel=(rowFeel===v?'':v);renderRowChips();}, ()=>rowFeel);
+  showSheet('rowSheet');
+}
+function renderRowChips(){
+  renderChips('boatChips', BOATS.map(b=>({v:b,l:b})), v=>{rowBoat=v;renderRowChips();}, ()=>rowBoat);
+  renderChips('feelChips', FEELS.map(f=>({v:f,l:f})), v=>{rowFeel=(rowFeel===v?'':v);renderRowChips();}, ()=>rowFeel);
+}
+function setRowType(t){
+  rowType=t;
+  document.getElementById('rt-erg').classList.toggle('on',t==='erg');
+  document.getElementById('rt-water').classList.toggle('on',t==='water');
+  document.getElementById('rateField').style.display = t==='erg'?'block':'none';
+  document.getElementById('splitRow').style.display = t==='erg'?'block':'none';
+  document.getElementById('boatField').style.display = t==='water'?'block':'none';
+}
+function parseTime(str){
+  if(!str)return 0;
+  str=str.trim();
+  if(str.includes(':')){const[m,s]=str.split(':').map(Number);return (m||0)*60+(s||0);}
+  return Number(str)||0;
+}
+function calcSplit(){
+  const dist=Number(document.getElementById('r-dist').value);
+  const secs=parseTime(document.getElementById('r-time').value);
+  const out=document.getElementById('r-split');
+  if(dist>0&&secs>0){
+    const per500=secs/dist*500;
+    const m=Math.floor(per500/60), s=Math.round(per500%60);
+    out.value=m+':'+String(s).padStart(2,'0');
+  } else out.value='—';
+}
+document.addEventListener('input',e=>{
+  if(e.target.id==='r-dist'||e.target.id==='r-time')calcSplit();
+});
+/* =================== PHOTOS (IndexedDB — big storage, on-device) =================== */
+const PDB={
+  open(){ return new Promise((res,rej)=>{
+    const q=indexedDB.open('rowlog_photos',1);
+    q.onupgradeneeded=()=>q.result.createObjectStore('p');
+    q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error);
+  });},
+  async put(id,blob){ const db=await this.open(); return new Promise((res,rej)=>{
+    const tx=db.transaction('p','readwrite'); tx.objectStore('p').put(blob,id);
+    tx.oncomplete=res; tx.onerror=()=>rej(tx.error);
+  });},
+  async get(id){ const db=await this.open(); return new Promise(res=>{
+    const q=db.transaction('p').objectStore('p').get(id);
+    q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null);
+  });},
+  async del(id){ const db=await this.open(); db.transaction('p','readwrite').objectStore('p').delete(id); },
+};
+let pendingPhoto=null;
+function photoPicked(inp){
+  const f=inp.files&&inp.files[0]; if(!f)return;
+  const img=new Image();
+  img.onload=()=>{
+    const max=1100, sc=Math.min(1,max/Math.max(img.width,img.height));
+    const c=document.createElement('canvas');
+    c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    c.toBlob(b=>{
+      pendingPhoto=b;
+      document.getElementById('photoPreview').src=URL.createObjectURL(b);
+      document.getElementById('photoPreviewWrap').style.display='block';
+      document.getElementById('photoBtn').textContent='📷 Change photo';
+    },'image/jpeg',0.65);
+    URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(f);
+}
+function clearPhoto(){
+  pendingPhoto=null;
+  const fi=document.getElementById('r-photo'); if(fi)fi.value='';
+  document.getElementById('photoPreviewWrap').style.display='none';
+  document.getElementById('photoBtn').textContent='📷 Snap the erg screen';
+}
+function photoThumbHTML(r){
+  return r.photo?`<img class="photo-thumb" data-pid="${r.id}" alt="erg monitor" onclick="event.stopPropagation();viewPhoto(${r.id})">`:'';
+}
+function hydratePhotos(){
+  document.querySelectorAll('img.photo-thumb[data-pid]:not([src])').forEach(async el=>{
+    const b=await PDB.get(Number(el.dataset.pid));
+    if(b) el.src=URL.createObjectURL(b); else el.remove();
+  });
+}
+async function viewPhoto(id){
+  const b=await PDB.get(id); if(!b)return;
+  let v=document.getElementById('photoViewer');
+  if(!v){
+    v=document.createElement('div'); v.id='photoViewer';
+    v.innerHTML='<img alt="erg monitor photo"><div class="hint">Tap anywhere to close</div>';
+    v.onclick=()=>v.classList.remove('show');
+    document.body.appendChild(v);
+  }
+  v.querySelector('img').src=URL.createObjectURL(b);
+  v.classList.add('show');
+}
+
+function splitSec(r){ return (r.dist>0&&r.secs>0)? r.secs/r.dist*500 : null; }
+function fmtSplit(s){
+  if(s==null)return '—';
+  const m=Math.floor(s/60), sec=(s%60);
+  const whole=Math.floor(sec), tenth=Math.round((sec-whole)*10);
+  return m+':'+String(whole).padStart(2,'0')+(tenth?'.'+tenth:'');
+}
+function saveRow(){
+  const dist=Number(document.getElementById('r-dist').value)||0;
+  const timeStr=document.getElementById('r-time').value.trim();
+  const secs=parseTime(timeStr);
+  if(!dist && !secs){ alert('Add a distance or time first.'); return; }
+  calcSplit();
+  const entry={
+    id:Date.now(), ts:Date.now(), date:TODAY, type:rowType,
+    dist, secs, timeStr, split:document.getElementById('r-split').value,
+    rate:Number(document.getElementById('r-rate').value)||null,
+    boat: rowType==='water'?rowBoat:null,
+    feel:rowFeel, notes:document.getElementById('r-notes').value.trim(),
+    photo:!!pendingPhoto,
+  };
+  if(pendingPhoto){ PDB.put(entry.id,pendingPhoto).catch(()=>{entry.photo=false;persist();}); }
+  // PR check: fastest split at this distance+type so far?
+  const mySplit=splitSec(entry);
+  let isPR=false;
+  if(mySplit){
+    const prev=state.rows.filter(r=>r.type===entry.type&&r.dist===entry.dist&&splitSec(r));
+    isPR = prev.length>0 && prev.every(r=>mySplit<splitSec(r));
+  }
+  state.rows.push(entry);
+  persist(); closeSheet(); renderAll();
+  if(isPR) toast('🏆 New PR at '+dist.toLocaleString()+'m!');
+}
+function toast(msg){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';document.body.appendChild(t);}
+  t.textContent=msg;
+  requestAnimationFrame(()=>t.classList.add('show'));
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* =================== FOOD LOGGING =================== */
+let foodMeal='Breakfast';
+const MEALS=['Breakfast','Lunch','Dinner','Snack','Pre-row','Post-row'];
+function openFood(){
+  foodMeal=guessMeal();
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-cal').value='';
+  renderChips('mealChips', MEALS.map(m=>({v:m,l:m})), v=>{foodMeal=v;renderFoodChips();}, ()=>foodMeal);
+  showSheet('foodSheet');
+}
+function renderFoodChips(){
+  renderChips('mealChips', MEALS.map(m=>({v:m,l:m})), v=>{foodMeal=v;renderFoodChips();}, ()=>foodMeal);
+}
+function guessMeal(){
+  const h=new Date().getHours();
+  if(h<10)return 'Breakfast'; if(h<14)return 'Lunch'; if(h<17)return 'Snack'; if(h<21)return 'Dinner'; return 'Snack';
+}
+function saveFood(){
+  const desc=document.getElementById('f-desc').value.trim();
+  if(!desc){ alert('What did you eat?'); return; }
+  state.foods.push({
+    id:Date.now(), ts:Date.now(), date:TODAY, meal:foodMeal, desc,
+    cal:Number(document.getElementById('f-cal').value)||null,
+  });
+  persist(); closeSheet(); renderAll();
+}
+
+/* =================== WATER =================== */
+function addWater(n){
+  const cur=state.water[TODAY]||0;
+  state.water[TODAY]=Math.max(0,cur+n);
+  persist(); renderAll();
+  if(n>0){navigator.vibrate&&navigator.vibrate(15);}
+}
+function openWaterGoal(){
+  document.getElementById('g-cups').value=state.goalCups;
+  document.getElementById('g-oz').value=state.goalOz;
+  showSheet('goalSheet');
+}
+function saveGoal(){
+  state.goalCups=Math.max(1,Number(document.getElementById('g-cups').value)||3);
+  state.goalOz=Math.max(1,Number(document.getElementById('g-oz').value)||32);
+  persist(); closeSheet(); renderAll();
+}
+
+/* =================== SHARED CHIP RENDER =================== */
+function renderChips(containerId, items, onPick, getActive){
+  const el=document.getElementById(containerId);
+  el.innerHTML='';
+  items.forEach(it=>{
+    const b=document.createElement('button');
+    b.className='chip'+(getActive&&getActive()===it.v?' on':'');
+    b.textContent=it.l;
+    b.onclick=()=>onPick(it.v);
+    el.appendChild(b);
+  });
+}
+
+/* =================== DELETE =================== */
+function delRow(id){ if(confirm('Delete this row?')){state.rows=state.rows.filter(r=>r.id!==id);PDB.del(id);persist();renderAll();} }
+function delFood(id){ if(confirm('Delete this entry?')){state.foods=state.foods.filter(f=>f.id!==id);persist();renderAll();} }
+
+/* =================== RENDER =================== */
+function rowSummary(r){
+  const parts=[];
+  if(r.dist)parts.push(r.dist.toLocaleString()+' m');
+  if(r.timeStr)parts.push(r.timeStr);
+  if(r.type==='erg'&&r.split&&r.split!=='—')parts.push(r.split+'/500');
+  if(r.rate)parts.push('r'+r.rate);
+  if(r.boat)parts.push(r.boat);
+  return parts.join(' · ');
+}
+function rowTitle(r){ return (r.type==='erg'?'Erg':'On water')+(r.feel?' '+r.feel.split(' ')[0]:''); }
+
+function renderHome(){
+  document.getElementById('todayDate').textContent =
+    new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
+  const h=new Date().getHours();
+  document.getElementById('greeting').textContent = h<12?'Good morning 👋':h<18?'Good afternoon 👋':'Good evening 👋';
+
+  const todayRows=state.rows.filter(r=>r.date===TODAY);
+  const meters=todayRows.reduce((a,r)=>a+(r.dist||0),0);
+  document.getElementById('h-row-meters').innerHTML = meters.toLocaleString()+'<span class="unit"> m</span>';
+  document.getElementById('h-row-sub').textContent = todayRows.length? todayRows.length+' session'+(todayRows.length>1?'s':''):'No rows today';
+
+  const todayFoods=state.foods.filter(f=>f.date===TODAY);
+  document.getElementById('h-food-count').textContent=todayFoods.length;
+  const cals=todayFoods.reduce((a,f)=>a+(f.cal||0),0);
+  document.getElementById('h-food-sub').textContent = cals? cals.toLocaleString()+' cal':'meals logged';
+
+  renderWaterRing();
+
+  // feed
+  const feed=[...todayRows.map(r=>({...r,_k:'row'})),...todayFoods.map(f=>({...f,_k:'food'}))]
+    .sort((a,b)=>b.ts-a.ts);
+  // today's lift progress (not time-stamped — pinned on top)
+  let liftHtml='';
+  const todayLifts=state.lifts[TODAY]||{};
+  Object.keys(todayLifts).forEach(dk=>{
+    const p=LIFT_PLAN[dk]; if(!p)return;
+    const d=p.ex.filter((_,j)=>(todayLifts[dk][j]||{}).on).length;
+    if(!d)return;
+    liftHtml+=`<div class="entry">
+      <div class="ico" style="color:var(--accent2)">🏋️</div>
+      <div class="body"><div class="t">${p.title}</div>
+      <div class="d">${d}/${p.ex.length} exercises${d===p.ex.length?' · complete! 💪':''}</div></div>
+    </div>`;
+  });
+  const box=document.getElementById('homeFeed');
+  if(!feed.length && !liftHtml){ box.innerHTML='<div class="empty"><span class="em">🌅</span>Nothing logged yet today.<br>Tap a button above to start.</div>'; return; }
+  box.innerHTML=liftHtml+feed.map(item=>{
+    if(item._k==='row'){
+      return entryHTML('🚣', rowTitle(item), rowSummary(item)+' · '+fmtTime(item.ts), item.notes, 'delRow', item.id, 'var(--row)', item);
+    }
+    return entryHTML('🍽️', item.meal, escapeHtml(item.desc)+(item.cal?' · '+item.cal+' cal':'')+' · '+fmtTime(item.ts), '', 'delFood', item.id, 'var(--food)');
+  }).join('');
+  hydratePhotos();
+}
+
+function entryHTML(icon,title,desc,note,delFn,id,color,rec){
+  return `<div class="entry">
+    <div class="ico" style="color:${color}">${icon}</div>
+    <div class="body">
+      <div class="t">${escapeHtml(title)}</div>
+      <div class="d">${desc}</div>
+      ${note?`<div class="d" style="margin-top:4px;font-style:italic;">“${escapeHtml(note)}”</div>`:''}
+      ${rec?photoThumbHTML(rec):''}
+    </div>
+    <button class="del" onclick="${delFn}(${id})">×</button>
+  </div>`;
+}
+
+function renderWaterRing(){
+  const cups=state.water[TODAY]||0, goal=state.goalCups;
+  const circ=263.9, pct=Math.min(1,cups/goal);
+  document.getElementById('waterArc').style.strokeDashoffset = circ*(1-pct);
+  document.getElementById('waterCups').textContent=cups;
+  document.getElementById('waterGoalLbl').textContent='/ '+goal+' bottles';
+  document.getElementById('waterHint').textContent = cups>=goal? '🎉 Goal reached! Great job.' : 'Tap when you finish a bottle';
+}
+
+/* =================== SPLIT PROGRESS =================== */
+let progDist=null;
+function renderProgress(){
+  const card=document.getElementById('progressCard');
+  // erg rows with a valid split, grouped by distance
+  const ergs=state.rows.filter(r=>r.type==='erg'&&splitSec(r));
+  const byDist={};
+  ergs.forEach(r=>{(byDist[r.dist]=byDist[r.dist]||[]).push(r);});
+  const dists=Object.keys(byDist).map(Number).sort((a,b)=>a-b);
+  if(!dists.length){
+    card.style.display='block';
+    document.getElementById('progDistChips').innerHTML='';
+    document.getElementById('progStats').innerHTML='';
+    document.getElementById('progChart').innerHTML=
+      '<div class="empty" style="padding:16px 8px;"><span class="em">📈</span>Log erg pieces with distance + time<br>and your split progress will chart here.</div>';
+    return;
+  }
+  if(progDist==null||!byDist[progDist]){
+    // default: this season's race distance if he's rowed it, else most sessions (ties → longer)
+    progDist = byDist[SEASONS[SEASON].dist] ? SEASONS[SEASON].dist :
+      dists.reduce((best,d)=> byDist[d].length>=byDist[best].length?d:best, dists[0]);
+  }
+  renderChips('progDistChips', dists.map(d=>({v:d,l:d.toLocaleString()+'m'})), v=>{progDist=v;renderProgress();}, ()=>progDist);
+
+  const pts=byDist[progDist].slice().sort((a,b)=>a.ts-b.ts).map(r=>({ts:r.ts,date:r.date,s:splitSec(r)}));
+  const best=Math.min(...pts.map(p=>p.s));
+  const latest=pts[pts.length-1].s, first=pts[0].s;
+  const delta=latest-first;
+  const deltaTxt = pts.length<2 ? '—' : (delta<=0?'−':'+')+fmtSplit(Math.abs(delta)).replace(/^0:0?/,'')+'s';
+  const deltaColor = pts.length<2 ? 'var(--muted)' : (delta<0?'var(--good)':delta>0?'var(--danger)':'var(--muted)');
+  document.getElementById('progStats').innerHTML=`<div class="prog-stats">
+    <div class="prog-stat pr"><div class="l">Best 🏆</div><div class="v">${fmtSplit(best)}</div></div>
+    <div class="prog-stat"><div class="l">Latest</div><div class="v">${fmtSplit(latest)}</div></div>
+    <div class="prog-stat"><div class="l">Change</div><div class="v" style="color:${deltaColor}">${deltaTxt}</div></div>
+  </div>`;
+
+  document.getElementById('progChart').innerHTML=chartSVG(pts,best);
+}
+function chartSVG(pts,best){
+  const W=340,H=170,padL=44,padR=14,padT=16,padB=26;
+  const iw=W-padL-padR, ih=H-padT-padB;
+  let min=Math.min(...pts.map(p=>p.s)), max=Math.max(...pts.map(p=>p.s));
+  if(max-min<4){const m=(max+min)/2;min=m-2;max=m+2;} // avoid over-zoom on tiny range
+  const pad=(max-min)*0.15; min-=pad; max+=pad;
+  const X=i=> pts.length===1? padL+iw/2 : padL+iw*(i/(pts.length-1));
+  const Y=s=> padT+ih*((s-min)/(max-min)); // lower split = higher on chart? No: smaller s → smaller y → nearer top. Faster at top.
+  // grid: 3 lines
+  let g='';
+  for(let k=0;k<=2;k++){
+    const s=min+(max-min)*k/2, y=Y(s);
+    g+=`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 4"/>`;
+    g+=`<text x="${padL-7}" y="${y+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtSplit(s).split('.')[0]}</text>`;
+  }
+  const line=pts.map((p,i)=>`${X(i)},${Y(p.s)}`).join(' ');
+  let dots='';
+  pts.forEach((p,i)=>{
+    const isBest=p.s===best;
+    dots+=`<circle cx="${X(i)}" cy="${Y(p.s)}" r="${isBest?5.5:4}" fill="${isBest?'var(--accent2)':'var(--accent)'}" stroke="var(--bg)" stroke-width="2"/>`;
+    if(isBest)dots+=`<text x="${X(i)}" y="${Y(p.s)-10}" text-anchor="middle" font-size="11" fill="var(--accent2)" font-weight="700">PR</text>`;
+  });
+  const d0=fmtDay(pts[0].date), d1=fmtDay(pts[pts.length-1].date);
+  const xlab=`<text x="${padL}" y="${H-6}" font-size="10" fill="var(--muted)">${d0}</text>`+
+    (pts.length>1?`<text x="${W-padR}" y="${H-6}" text-anchor="end" font-size="10" fill="var(--muted)">${d1}</text>`:'');
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    ${g}
+    ${pts.length>1?`<polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`:''}
+    ${dots}${xlab}
+    <text x="${W-padR}" y="${padT-4}" text-anchor="end" font-size="10" fill="var(--dim)">⬆ faster</text>
+  </svg>`;
+}
+
+function renderRowView(){
+  renderProgress();
+  // this week (Mon-based simple: last 7 days)
+  const wk=state.rows.filter(r=>{
+    const [y,m,d]=r.date.split('-').map(Number);
+    return (new Date()- new Date(y,m-1,d))<7*864e5;
+  });
+  const wm=wk.reduce((a,r)=>a+(r.dist||0),0);
+  document.getElementById('weekMeters').innerHTML=wm.toLocaleString()+'<span class="unit"> m</span>';
+  document.getElementById('weekRowSub').textContent=wk.length+' session'+(wk.length===1?'':'s');
+
+  const list=document.getElementById('rowList');
+  const sorted=[...state.rows].sort((a,b)=>b.ts-a.ts);
+  if(!sorted.length){ list.innerHTML='<div class="empty"><span class="em">🚣</span>No rows logged yet.</div>'; return; }
+  // group by day
+  let html='', lastDay=null;
+  sorted.forEach(r=>{
+    if(r.date!==lastDay){ html+=`<div class="section-title">${fmtDay(r.date)}</div><div class="card">`; if(lastDay!==null)html=html; lastDay=r.date; }
+  });
+  // simpler: build grouped
+  html=''; const groups={};
+  sorted.forEach(r=>{(groups[r.date]=groups[r.date]||[]).push(r);});
+  Object.keys(groups).forEach(day=>{
+    html+=`<div class="section-title">${fmtDay(day)}</div><div class="card">`;
+    groups[day].forEach(r=>{
+      const tags=(r.feel?`<span class="pill" style="background:var(--card2);color:var(--muted)">${r.feel}</span>`:'');
+      html+=`<div class="entry">
+        <div class="ico" style="color:var(--row)">${r.type==='erg'?'⚙️':'🌊'}</div>
+        <div class="body">
+          <div class="t">${r.type==='erg'?'Erg':'On water'}</div>
+          <div class="d">${rowSummary(r)||'—'} · ${fmtTime(r.ts)}</div>
+          ${r.notes?`<div class="d" style="margin-top:4px;font-style:italic;">“${escapeHtml(r.notes)}”</div>`:''}
+          ${photoThumbHTML(r)}
+          ${tags?`<div class="tags">${tags}</div>`:''}
+        </div>
+        <button class="del" onclick="delRow(${r.id})">×</button>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  list.innerHTML=html;
+  hydratePhotos();
+}
+
+let foodDay=TODAY;
+function renderFoodView(){
+  // day selector = last 5 days
+  const seg=document.getElementById('foodDaySeg');
+  const days=[];for(let i=0;i<5;i++){days.push(todayKey(new Date(Date.now()-i*864e5)));}
+  seg.innerHTML=days.map(d=>`<button class="${d===foodDay?'on':''}" onclick="foodDay='${d}';renderFoodView()">${d===TODAY?'Today':fmtDay(d).split(',')[0]}</button>`).join('');
+
+  const items=state.foods.filter(f=>f.date===foodDay).sort((a,b)=>a.ts-b.ts);
+  const list=document.getElementById('foodList');
+  if(!items.length){ list.innerHTML='<div class="empty"><span class="em">🍽️</span>No food logged for this day.</div>'; return; }
+  const cals=items.reduce((a,f)=>a+(f.cal||0),0);
+  let html=`<div class="card"><div class="row-between"><h2 style="margin:0">${items.length} entries</h2>${cals?`<span class="pill" style="background:var(--card2);color:var(--food)">${cals.toLocaleString()} cal</span>`:''}</div></div>`;
+  // group by meal
+  const order=MEALS;
+  order.forEach(meal=>{
+    const ms=items.filter(f=>f.meal===meal);
+    if(!ms.length)return;
+    html+=`<div class="section-title">${meal}</div><div class="card">`;
+    ms.forEach(f=>{
+      html+=`<div class="entry">
+        <div class="ico" style="color:var(--food)">🍴</div>
+        <div class="body">
+          <div class="t">${escapeHtml(f.desc)}</div>
+          <div class="d">${f.cal?f.cal+' cal · ':''}${fmtTime(f.ts)}</div>
+        </div>
+        <button class="del" onclick="delFood(${f.id})">×</button>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  list.innerHTML=html;
+}
+
+function renderWaterView(){
+  const cups=state.water[TODAY]||0, goal=state.goalCups;
+  document.getElementById('waterCups2').textContent=cups;
+  document.getElementById('waterGoal2').textContent=goal;
+  document.getElementById('waterOz').textContent=(cups*state.goalOz)+' oz of '+(goal*state.goalOz)+' oz';
+  const cr=document.getElementById('cupRow');
+  const total=Math.max(goal,cups);
+  let ch='';
+  for(let i=0;i<total;i++){ ch+=`<div class="cup ${i<cups?'full':''}"></div>`; }
+  cr.innerHTML=ch;
+  // history
+  const hb=document.getElementById('waterHistory');
+  let html='';
+  for(let i=0;i<7;i++){
+    const key=todayKey(new Date(Date.now()-i*864e5));
+    const c=state.water[key]||0;
+    const pct=Math.min(100,Math.round(c/goal*100));
+    html+=`<div style="margin-bottom:${i===6?0:12}px;">
+      <div class="row-between" style="margin-bottom:5px;"><span style="font-size:13px;font-weight:600;">${fmtDay(key)}</span><span class="muted" style="font-size:13px;">${c}/${goal}</span></div>
+      <div style="height:9px;background:var(--bg2);border-radius:5px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--water);border-radius:5px;transition:.4s;"></div></div>
+    </div>`;
+  }
+  hb.innerHTML=html;
+}
+
+/* =================== RACING SEASON (OARS calendar) =================== */
+/* Fall head races Sep–Nov · winter training Dec–Feb · sprint season Mar–mid-Jun
+   (FSRA States Apr → Regionals May → Youth Nationals mid-Jun) · summer mid-Jun–Aug */
+function currentSeason(){
+  const now=new Date(), m=now.getMonth(), d=now.getDate(); // m: 0=Jan
+  if(m>=8&&m<=10) return 'head';
+  if(m===11||m<=1) return 'winter';
+  if(m>=2&&(m<5||(m===5&&d<15))) return 'sprint';
+  return 'summer';
+}
+const SEASONS={
+  sprint:{e:'🏁',name:'Sprint Season',dist:2000,
+    focus:'2k racing — speed, starts & pacing',
+    about:'Championship season: FSRA States → Regionals → Youth Nationals. Everything points at the 2k.',
+    lift:'Racing season — team practice comes first. Use the split on non-water days and go lighter near race day.',
+    workouts:[
+      {t:'4×500m @ 2k pace · 2 min rest',d:500},
+      {t:'2k test — even splits, empty the last 500',d:2000},
+      {t:'8×250m starts @ high rate',d:250},
+    ]},
+  summer:{e:'☀️',name:'Summer Training',dist:5000,
+    focus:'build your base — train 4–6 days a week',
+    about:'Coach Kirsten: map out a summer plan and be intentional — steady meters, camps, and cross-training (swim laps!) win the fall.',
+    lift:'This is Coach Jenn\'s summer program — 3 gym days plus cardio on off days is the plan.',
+    workouts:[
+      {t:'Steady state 5k @ r20–22',d:5000},
+      {t:'Coach Jenn: 4×500m erg sprints · 2 min rest',d:500},
+      {t:'Cross-train: swim laps or 20 min HIIT'},
+    ]},
+  head:{e:'🍂',name:'Head Race Season',dist:5000,
+    focus:'5k endurance — rhythm & negative splits',
+    about:'Fall head races are long grinds. Win them with steady rhythm, clean technique, and a strong back half.',
+    lift:'In-season — lift on non-water days and keep loads moderate so your legs are fresh for practice.',
+    workouts:[
+      {t:'5k steady @ r18–20',d:5000},
+      {t:'3×2000m @ head pace · 3 min rest',d:2000},
+      {t:'60 min steady state, low rate'},
+    ]},
+  winter:{e:'❄️',name:'Winter Training',dist:6000,
+    focus:'base & strength — build the engine',
+    about:'No racing — so this is where spring speed gets made. Long meters, big lifts, and consistency.',
+    lift:'Strength counts double right now — winter is the best time to push the 3-day split hard.',
+    workouts:[
+      {t:'6k @ steady pressure',d:6000},
+      {t:'2×20 min steady @ r18–20'},
+      {t:'Coach Jenn: 3-day lift split + cardio'},
+    ]},
+};
+const SEASON=currentSeason();
+
+/* =================== DAILY QUOTE =================== */
+/* Coach lines pulled from the OARS weekly emails + rowing classics */
+const QUOTES=[
+  {q:'Use them or lose them — starting over is hard!',by:'Coach Jenn'},
+  {q:'Whatever your summer looks like, be intentional about it.',by:'Coach Kirsten'},
+  {q:'Sleep is where your body does its best recovery and healing work!',by:'Coach Jenn'},
+  {q:'Keep that core tight at all times!',by:'Coach Jenn'},
+  {q:'Feel and be your best self!',by:'Coach Jenn'},
+  {q:'The mission of OARS is to develop excellence in rowing.',by:'OARS'},
+  {q:'See you at the boathouse!',by:'Coach Kirsten'},
+  {q:"It's a great art, is rowing. It's the finest art there is.",by:'George Yeoman Pocock'},
+  {q:'It never gets easier, you just go faster.',by:'Greg LeMond'},
+  {q:'Champions keep playing until they get it right.',by:'Billie Jean King'},
+  {q:'Motivation is what gets you started. Habit is what keeps you going.',by:'Jim Ryun'},
+  {q:"Hard work beats talent when talent doesn't work hard.",by:'Tim Notke'},
+];
+let quoteBump=0;
+function quoteIndex(){
+  const dayN=Math.floor(new Date().setHours(0,0,0,0)/864e5);
+  return (dayN+quoteBump)%QUOTES.length;
+}
+function renderQuote(){
+  const {q,by}=QUOTES[quoteIndex()];
+  document.getElementById('quoteCard').innerHTML=
+    `<div style="display:flex;gap:11px;align-items:flex-start;">
+      <span style="font-size:22px;color:var(--accent2);font-weight:800;line-height:1;">“</span>
+      <div style="flex:1;">
+        <div style="font-size:14px;line-height:1.5;font-style:italic;color:#dfe7f6;">${q}</div>
+        <div style="font-size:12px;color:var(--accent);font-weight:700;margin-top:5px;">— ${by}</div>
+      </div>
+    </div>`;
+}
+function nextQuote(){ quoteBump++; renderQuote(); }
+function openRowWith(d){ openRow(); if(d){ document.getElementById('r-dist').value=d; calcSplit(); } }
+function openVideo(q){ window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(q),'_blank','noopener'); }
+function renderSeason(){
+  const s=SEASONS[SEASON];
+  document.getElementById('seasonBanner').innerHTML=
+    `<div style="display:flex;align-items:center;gap:12px;">
+      <span style="font-size:24px;">${s.e}</span>
+      <div style="flex:1;">
+        <div style="font-weight:800;font-size:15px;">${s.name}</div>
+        <div class="muted" style="font-size:12.5px;margin-top:1px;">${s.focus}</div>
+      </div>
+      <span class="pill" style="background:var(--card2);color:var(--accent);">${s.dist.toLocaleString()}m focus</span>
+    </div>`;
+  document.getElementById('seasonWorkouts').innerHTML=
+    `<div class="row-between" style="margin-bottom:8px;">
+      <h2 style="margin:0;">${s.e} This season</h2>
+      <span class="pill" style="background:var(--card2);color:var(--accent);">${s.name}</span>
+    </div>
+    <div class="muted" style="font-size:13px;line-height:1.5;margin-bottom:12px;">${s.about}</div>
+    ${s.workouts.map(w=>`<button class="chip" style="display:flex;width:100%;text-align:left;margin-bottom:8px;justify-content:space-between;align-items:center;"
+        onclick="${w.d?`openRowWith(${w.d})`:`go('lift')`}">
+        <span>${w.t}</span><span style="color:var(--accent);font-weight:800;">${w.d?'+ log':'→'}</span>
+      </button>`).join('')}`;
+}
+
+/* =================== LIFTING — Coach Jenn's 3-Day Split =================== */
+/* Source: OARS Weekly Update (May 18) — Coach Jenn's Health & Performance */
+const LIFT_PLAN={
+  mon:{label:'Mon',title:'Monday · Upper Body',scheme:'3–4 sets × 8–12 reps · 30–60 sec rest',ex:[
+    {n:'Pullups (assisted ok) + Pushups',ss:'warm-up: 3 sets back to back',fn:'Chin and chest up as you pull yourself up. Hands wider on pushups.',v:'assisted pull up proper form short'},
+    {n:'Chest Press',ss:'dumbbell or barbell · stability ball option for core',fn:'Lie on bench or ball under upper back to engage core. Keep wrists over elbows at all times.',v:'dumbbell chest press proper form short'},
+    {n:'High Row / Lat Pull',ss:'superset: chest stretch',fn:'Pull cables from high position, squeezing shoulders down and back.',v:'lat pulldown proper form short'},
+    {n:'Mid Row',ss:'superset: chest stretch',fn:'Seated row — pull straight back, shoulders squeeze down and back.',v:'seated cable row proper form short'},
+    {n:'Rear Delt Fly (machine)',ss:'',fn:'Turn around in the machine. Keep arms straight, relax your neck.',v:'rear delt fly machine proper form short'},
+    {n:'Back / Hip Extension',ss:'superset: decline crunch · 3× 15/12/10',fn:'Flat back — never round it down! Come up by squeezing your butt and low back.',v:'back extension machine proper form short'},
+    {n:'Decline Pushup — burnout',ss:'2× 15+',fn:'Feet up on bench or stability ball. Strong core!',v:'decline push up proper form short'},
+  ]},
+  wed:{label:'Wed',title:'Wednesday · Legs',scheme:'3–4 sets × 10–15 reps · 30–60 sec rest',ex:[
+    {n:'Smith Machine Squat',ss:'superset: glute bridge ×20 + scullers ×30',fn:'Feet shoulder-width, toes 10° out. Weight on heels at bottom, core tight, exhale at the top — squeeze glutes!!',v:'smith machine squat proper form short'},
+    {n:'Shoulder Press',ss:'superset: leg press',fn:'Hands under shoulders, elbows bending toward hips. Press straight up.',v:'dumbbell shoulder press proper form short'},
+    {n:'Upright Row',ss:'superset: weighted step-up',fn:'Straight bar — pull elbows out wide and up. Hands no higher than your chest.',v:'barbell upright row proper form short'},
+    {n:'Deadlift',ss:'superset: lunges',fn:'Use the mirrors for form. Chin and chest forward as you push hips back. Squeeze glutes to stand.',v:'deadlift proper form beginner short'},
+    {n:'Stability Ball Knee Tuck',ss:'superset: ball hamstring curl',fn:'Shins on the ball, core up and tight — tuck knees and extend back.',v:'stability ball knee tuck proper form short'},
+    {n:'Erg: 4×500m · 2 min rest',ss:'or 4×90 sec sprint, 2 min jog recovery',fn:'Finish the day with sprint intervals.',v:'rowing machine 500m sprint technique short'},
+  ]},
+  fri:{label:'Fri',title:'Friday · Arms & Core',scheme:'3–4 sets × 10–30 reps · 30–60 sec rest',ex:[
+    {n:'Assisted Pullups',ss:'superset: tricep dips',fn:'Chin and chest up as you pull. Dips: lower slowly and press back up — don\'t go too low!',v:'assisted pull up proper form short'},
+    {n:'Tricep Pushups',ss:'superset: medicine ball twist (abs)',fn:'Hands under shoulders, elbows bending toward hips. Keep core tight!!!',v:'tricep push up proper form short'},
+    {n:'Barbell Bicep Curl',ss:'superset: tricep flutter',fn:'Soft knees, elbows at your sides, curl the bar ¾ of the way up. Flutter: on stomach, 10 lb each hand, palms down.',v:'barbell bicep curl proper form short'},
+    {n:'Tricep Push Down',ss:'superset: dumbbell hammer curl',fn:'Use ropes or machine.',v:'tricep rope pushdown proper form short'},
+    {n:'Back / Hip Extension',ss:'superset: decline leg lifts',fn:'Flat back — never round it down! Squeeze your butt and low back to come up.',v:'back extension machine proper form short'},
+  ]},
+};
+function defaultLiftDay(){
+  const wd=new Date().getDay(); // 0 Sun..6 Sat
+  if(wd<=1) return 'mon';       // Sun, Mon
+  if(wd<=3) return 'wed';       // Tue, Wed
+  return 'fri';                 // Thu, Fri, Sat
+}
+let liftDay=defaultLiftDay();
+function liftRec(date,day){
+  state.lifts[date]=state.lifts[date]||{};
+  state.lifts[date][day]=state.lifts[date][day]||{};
+  return state.lifts[date][day];
+}
+function toggleEx(i){
+  const rec=liftRec(TODAY,liftDay);
+  rec[i]=rec[i]||{};
+  rec[i].on=!rec[i].on;
+  persist(); renderLiftView(); renderHome();
+  const plan=LIFT_PLAN[liftDay];
+  const done=plan.ex.filter((_,j)=>(rec[j]||{}).on).length;
+  if(done===plan.ex.length) toast('💪 '+plan.label+' lift complete — nice work!');
+}
+function setExField(i,f,v){
+  const rec=liftRec(TODAY,liftDay);
+  rec[i]=rec[i]||{};
+  rec[i][f]=v;
+  persist();
+}
+function renderLiftView(){
+  document.getElementById('liftSeasonNote').textContent=
+    SEASONS[SEASON].e+' '+SEASONS[SEASON].name+': '+SEASONS[SEASON].lift;
+  const seg=document.getElementById('liftDaySeg');
+  seg.innerHTML=Object.keys(LIFT_PLAN).map(k=>
+    `<button class="${k===liftDay?'on':''}" onclick="liftDay='${k}';renderLiftView()">${LIFT_PLAN[k].label}</button>`).join('');
+  const plan=LIFT_PLAN[liftDay];
+  const rec=(state.lifts[TODAY]||{})[liftDay]||{};
+  const done=plan.ex.filter((_,i)=>(rec[i]||{}).on).length;
+  document.getElementById('liftDonePill').textContent=done+' / '+plan.ex.length+' today';
+  document.getElementById('liftMeta').innerHTML=
+    `<div class="lift-scheme"><span>${plan.title}</span><span style="color:var(--accent);white-space:nowrap;">${plan.scheme}</span></div>`;
+  document.getElementById('liftList').innerHTML=plan.ex.map((e,i)=>{
+    const r=rec[i]||{};
+    return `<div class="ex ${r.on?'done':''}">
+      <div class="top" onclick="toggleEx(${i})">
+        <div class="chk">✓</div>
+        <div style="flex:1;">
+          <div class="nm">${e.n}</div>
+          ${e.ss?`<div class="ss">↳ ${e.ss}</div>`:''}
+          <div class="fn">${e.fn}</div>
+        </div>
+        ${e.v?`<button class="vid" onclick="event.stopPropagation();openVideo('${e.v}')" title="Watch a short how-to">▶</button>`:''}
+      </div>
+      <div class="log">
+        <input placeholder="weight (lb)" inputmode="decimal" value="${escapeHtml(r.w||'')}"
+          onclick="event.stopPropagation()" oninput="setExField(${i},'w',this.value)">
+        <input placeholder="sets × reps" value="${escapeHtml(r.r||'')}"
+          onclick="event.stopPropagation()" oninput="setExField(${i},'r',this.value)">
+      </div>
+    </div>`;
+  }).join('');
+  // history: last 14 days with any completed exercise
+  let hist='';
+  for(let i=1;i<=14;i++){
+    const key=todayKey(new Date(Date.now()-i*864e5));
+    const days=state.lifts[key]; if(!days)continue;
+    Object.keys(days).forEach(dk=>{
+      const p=LIFT_PLAN[dk]; if(!p)return;
+      const d=p.ex.filter((_,j)=>(days[dk][j]||{}).on).length;
+      if(!d)return;
+      hist+=`<div class="entry">
+        <div class="ico">🏋️</div>
+        <div class="body"><div class="t">${p.title}</div>
+        <div class="d">${d}/${p.ex.length} exercises · ${fmtDay(key)}</div></div>
+      </div>`;
+    });
+  }
+  document.getElementById('liftHistory').innerHTML =
+    hist? `<div class="card">${hist}</div>` : '<div class="empty"><span class="em">🏋️</span>No lifts logged yet.<br>Check off exercises as you go.</div>';
+}
+
+/* =================== TIPS =================== */
+const TIPS=[
+  {cat:'Technique',e:'🔗',t:'Nail the stroke sequence',b:'Every stroke is legs → back → arms on the drive, then arms → back → legs on the recovery. Push with your legs first; don\'t open your back early.'},
+  {cat:'Technique',e:'🐢',t:'Slow the recovery',b:'Rushing up the slide kills your rhythm. Aim for a recovery about twice as long as the drive. Control the slide with your legs.'},
+  {cat:'Technique',e:'🤚',t:'Loose grip, flat wrists',b:'Hold the handle with your fingers, not a death grip. Keep wrists flat to feather cleanly and save your forearms over long pieces.'},
+  {cat:'Technique',e:'🎯',t:'Connect at the catch',b:'At the catch, shins vertical, arms straight, body forward. Drop the blade in and push — don\'t reach with your back or you\'ll lose power.'},
+  {cat:'Technique',e:'💥',t:'Power comes from the legs',b:'~60% of your power is legs, ~30% back, ~10% arms. If your arms are tired before your legs, you\'re pulling too early.'},
+  {cat:'Erg',e:'📉',t:'Understand your split',b:'Split = time to row 500m at your current pace. Lower is faster. Watch it stay steady — an even split usually beats going out hard and fading.'},
+  {cat:'Erg',e:'🌀',t:'Damper isn\'t resistance',b:'A higher damper (drag) isn\'t "harder = better." Most rowers train around 3–5. It changes how the stroke feels, not your score by itself.'},
+  {cat:'Erg',e:'🎚️',t:'Rate vs. pressure',b:'You can go faster by rating higher (more strokes/min) OR pulling harder each stroke. Learn to hold a pace at a low rate — it builds real strength.'},
+  {cat:'Erg',e:'📊',t:'Test smart, not just hard',b:'For a 2k test, pick a target split you can hold, start controlled, hold the middle 1000, then empty the tank the last 500.'},
+  {cat:'Nutrition',e:'🍞',t:'Carbs are fuel',b:'Rowing burns a ton of energy. Base meals around carbs — rice, pasta, oats, potatoes, bread — plus protein and veg. Don\'t under-eat as a growing athlete.'},
+  {cat:'Nutrition',e:'⏰',t:'Eat before you row',b:'Have a light carb snack 1–2 hours before: banana, toast, oatmeal, granola bar. Rowing on empty makes you weak and lightheaded.'},
+  {cat:'Nutrition',e:'💪',t:'Refuel within an hour',b:'After a hard session, eat carbs + protein within ~60 min to recover: chocolate milk, a sandwich, yogurt and fruit, or a full meal.'},
+  {cat:'Nutrition',e:'🥩',t:'Protein every meal',b:'Aim for a protein source at each meal — eggs, chicken, fish, beans, Greek yogurt, milk. It rebuilds muscle after training.'},
+  {cat:'Nutrition',e:'🍳',t:'Breakfast matters most',b:'Never skip breakfast on a training day. It sets up your energy for morning practice and stops you crashing by lunch.'},
+  {cat:'Hydration',e:'💧',t:'Coach Jenn: 20 oz per hour',b:'From wake-up until practice, drink ½–1 cup of water every 20 minutes (about 20 oz per hour). Exercise dulls thirst, so most rowers under-drink without noticing.'},
+  {cat:'Hydration',e:'🥤',t:'Coach Jenn: electrolytes at practice',b:'For 2-hour training sessions, bring an electrolyte drink (like Body Armor). Sip ¼–½ the bottle in hour one, the rest early in hour two — 30–60g of carbs per hour keeps you off the wall.'},
+  {cat:'Hydration',e:'🚰',t:'Dehydration = slower splits',b:'Being low on fluid raises your heart rate, makes every stroke feel harder, and fogs your thinking. If your pee is dark yellow, you\'re already behind.'},
+  {cat:'Hydration',e:'🧂',t:'Replace salt when sweaty',b:'On long, hot sessions plain water isn\'t enough. An electrolyte drink or a salty snack helps you hold onto the fluid.'},
+  {cat:'Recovery',e:'😴',t:'Sleep is training',b:'8–10 hours is where your body actually gets stronger. Skimping on sleep undoes a lot of your hard work on the water.'},
+  {cat:'Recovery',e:'🧘',t:'Stretch after, not cold',b:'Do easy mobility and stretching after you\'re warm — hips, hamstrings, shoulders, back. It keeps you loose for the next session.'},
+  {cat:'Recovery',e:'📅',t:'Rest days are for gains',b:'You don\'t get fitter during the workout — you get fitter recovering from it. Take your rest days seriously; they\'re part of the plan.'},
+  {cat:'Mindset',e:'🎯',t:'Row your own race',b:'On the erg or the water, focus on your split and your technique. Chasing someone else\'s pace early usually blows you up.'},
+  {cat:'Mindset',e:'📈',t:'Log everything',b:'Small gains add up. Tracking your rows, food, and water shows patterns — like rowing better on days you slept and ate well.'},
+];
+let tipCat='All';
+function renderTips(){
+  const cats=['All',...new Set(TIPS.map(t=>t.cat))];
+  const cr=document.getElementById('catRow');
+  cr.innerHTML=cats.map(c=>`<button class="cat ${c===tipCat?'on':''}" onclick="tipCat='${c}';renderTips()">${c}</button>`).join('');
+  const q=(document.getElementById('tipSearch').value||'').toLowerCase();
+  const list=TIPS.filter(t=>(tipCat==='All'||t.cat===tipCat)&&(!q||(t.t+t.b+t.cat).toLowerCase().includes(q)));
+  const el=document.getElementById('tipList');
+  if(!list.length){ el.innerHTML='<div class="empty"><span class="em">🔍</span>No tips found.</div>'; return; }
+  el.innerHTML=list.map(t=>`<div class="tip">
+    <div class="th"><span class="e">${t.e}</span><span class="tt">${t.t}</span><span class="pill" style="background:var(--card2);color:var(--muted)">${t.cat}</span></div>
+    <div class="body">${t.b}</div>
+  </div>`).join('');
+}
+
+/* =================== UTIL =================== */
+function escapeHtml(s){return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function renderAll(){
+  renderSeason();
+  renderQuote();
+  renderHome();
+  const active=document.querySelector('.view.active').id;
+  if(active==='view-row')renderRowView();
+  if(active==='view-lift')renderLiftView();
+  if(active==='view-food')renderFoodView();
+  if(active==='view-water')renderWaterView();
+  if(active==='view-tips')renderTips();
+}
+
+/* boot */
+renderAll();
+renderTips();
+</script>
+</body>
+</html>
