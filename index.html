@@ -1093,10 +1093,12 @@ function renderWaterView(){
 }
 
 /* =================== RACING SEASON (OARS calendar) =================== */
-/* Fall head races Sep–Nov · winter training Dec–Feb · sprint season Mar–mid-Jun
-   (FSRA States Apr → Regionals May → Youth Nationals mid-Jun) · summer mid-Jun–Aug */
+/* Fall season starts Aug 10 (2026–27 HS first practice for returning rowers) ·
+   head races Sep–Nov · winter training Dec–Feb · sprint season Mar–mid-Jun
+   (FSRA States Apr → Regionals May → Youth Nationals mid-Jun) · summer mid-Jun–Aug 9 */
 function currentSeason(){
   const now=new Date(), m=now.getMonth(), d=now.getDate(); // m: 0=Jan
+  if(m===7&&d>=10) return 'head';
   if(m>=8&&m<=10) return 'head';
   if(m===11||m<=1) return 'winter';
   if(m>=2&&(m<5||(m===5&&d<15))) return 'sprint';
@@ -1123,7 +1125,7 @@ const SEASONS={
     ]},
   head:{e:'🍂',name:'Head Race Season',dist:5000,
     focus:'5k endurance — rhythm & negative splits',
-    about:'Fall head races are long grinds. Win them with steady rhythm, clean technique, and a strong back half.',
+    about:'Returning HS rowers start practice Aug 10. Fall head races are long grinds — win them with steady rhythm, clean technique, and a strong back half.',
     lift:'In-season — lift on non-water days and keep loads moderate so your legs are fresh for practice.',
     workouts:[
       {t:'5k steady @ r18–20',d:5000},
