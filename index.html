@@ -408,6 +408,7 @@
               <li><b>20 min–1 hr before:</b> high-GI carbs — watermelon, grapes, raisins, honey, banana, sport drink or chews</li>
               <li><b>Right after racing:</b> high-GI carbs again + a little protein</li>
               <li><b>2 hrs post:</b> balanced meal</li>
+              <li><b>Post-race meal:</b> heavier protein for recovery and muscle rebuilding — plus extra fluids and your electrolyte drink</li>
             </ul>
           </div>
         </details>
@@ -451,6 +452,8 @@
           <ul style="margin:10px 0 0;padding-left:20px;">
             <li style="margin-bottom:7px;"><b>Before practice:</b> ½–1 cup every 20 minutes (about 20 oz per hour) from the time you wake up.</li>
             <li style="margin-bottom:7px;"><b>At practice:</b> an electrolyte drink (like Body Armor) for the full 2-hour session — sip 30–60g of carbs per hour, don't chug.</li>
+            <li style="margin-bottom:7px;"><b>Training days:</b> an extra bottle before practice, 1–2 during, 1+ after. On non-training days, half your body weight in mL of water.</li>
+            <li style="margin-bottom:7px;"><b>Sport drink:</b> best at the halfway mark of practice, or when you switch from lift to erg/row. It needs 15–20g of sugar per serving — Body Armor, coconut water, Gatorade, Liquid IV, or a DIY mix.</li>
             <li><b>Why it matters:</b> dehydration raises your heart rate, makes the work feel harder, and invites heat illness.</li>
           </ul>
         </div>
@@ -1094,14 +1097,15 @@ function renderWaterView(){
 
 /* =================== RACING SEASON (OARS calendar) =================== */
 /* Fall season starts Aug 10 (2026–27 HS first practice for returning rowers) ·
-   head races Sep–Nov · winter training Dec–Feb · sprint season Mar–mid-Jun
-   (FSRA States Apr → Regionals May → Youth Nationals mid-Jun) · summer mid-Jun–Aug 9 */
+   head races Sep–Nov · winter training Dec–mid-Feb · sprint season mid-Feb–mid-Jun
+   (spring races every other weekend mid-Feb–mid-May per the HS Program Overview;
+   FSRA States Apr → Regionals May → Youth Nationals mid-Jun) · summer mid-Jun–Aug 9 */
 function currentSeason(){
   const now=new Date(), m=now.getMonth(), d=now.getDate(); // m: 0=Jan
   if(m===7&&d>=10) return 'head';
   if(m>=8&&m<=10) return 'head';
-  if(m===11||m<=1) return 'winter';
-  if(m>=2&&(m<5||(m===5&&d<15))) return 'sprint';
+  if(m===11||m===0||(m===1&&d<15)) return 'winter';
+  if((m===1&&d>=15)||(m>=2&&(m<5||(m===5&&d<15)))) return 'sprint';
   return 'summer';
 }
 const SEASONS={
@@ -1154,6 +1158,9 @@ const QUOTES=[
   {q:'Feel and be your best self!',by:'Coach Jenn'},
   {q:'The mission of OARS is to develop excellence in rowing.',by:'OARS'},
   {q:'See you at the boathouse!',by:'Coach Kirsten'},
+  {q:'Fuel + Refuel = STRONG ROWERS.',by:'Coach Jenn'},
+  {q:'Train smarter, not harder.',by:'Coach Jenn'},
+  {q:"Here's to a great season ahead!",by:'Coach Kirsten'},
   {q:"It's a great art, is rowing. It's the finest art there is.",by:'George Yeoman Pocock'},
   {q:'It never gets easier, you just go faster.',by:'Greg LeMond'},
   {q:'Champions keep playing until they get it right.',by:'Billie Jean King'},
@@ -1325,6 +1332,10 @@ const TIPS=[
   {cat:'Nutrition',e:'💪',t:'Refuel within an hour',b:'After a hard session, eat carbs + protein within ~60 min to recover: chocolate milk, a sandwich, yogurt and fruit, or a full meal.'},
   {cat:'Nutrition',e:'🥩',t:'Protein every meal',b:'Aim for a protein source at each meal — eggs, chicken, fish, beans, Greek yogurt, milk. It rebuilds muscle after training.'},
   {cat:'Nutrition',e:'🍳',t:'Breakfast matters most',b:'Never skip breakfast on a training day. It sets up your energy for morning practice and stops you crashing by lunch.'},
+  {cat:'Nutrition',e:'🥧',t:'Coach Jenn: a rower\'s plate',b:'Rowers need mostly carbs (55–60%), a moderate amount of protein (30–35%), and a limited amount of fat (10–15%). Carbs fuel, protein rebuilds, fat balances.'},
+  {cat:'Nutrition',e:'🛒',t:'Coach Jenn: make good food easy',b:'Bulk buy (packs of meat, bags of rice, tubs of oats and yogurt), prep ahead (crockpot, cook extra at dinner), and keep it ready to scoop and go. "Failing to plan is planning to fail."'},
+  {cat:'Recovery',e:'⚠️',t:'Coach Jenn: signs of overtraining',b:'Watch for not finishing workouts, loss of appetite, performance going backwards, getting injured easily, and a poor mental state. The first step toward overtraining and injury is a lack of proper nutrition — pushing beyond the fuel you\'ve given your body.'},
+  {cat:'Recovery',e:'🧠',t:'Coach Jenn: train smarter, not harder',b:'Avoid overtraining by monitoring four things: balanced nutrition (eat enough!), hydration, sleep, and mobility/recovery.'},
   {cat:'Hydration',e:'💧',t:'Coach Jenn: 20 oz per hour',b:'From wake-up until practice, drink ½–1 cup of water every 20 minutes (about 20 oz per hour). Exercise dulls thirst, so most rowers under-drink without noticing.'},
   {cat:'Hydration',e:'🥤',t:'Coach Jenn: electrolytes at practice',b:'For 2-hour training sessions, bring an electrolyte drink (like Body Armor). Sip ¼–½ the bottle in hour one, the rest early in hour two — 30–60g of carbs per hour keeps you off the wall.'},
   {cat:'Hydration',e:'🚰',t:'Dehydration = slower splits',b:'Being low on fluid raises your heart rate, makes every stroke feel harder, and fogs your thinking. If your pee is dark yellow, you\'re already behind.'},
