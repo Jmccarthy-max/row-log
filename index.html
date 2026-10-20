@@ -603,6 +603,7 @@
   <div class="grip"></div>
   <h3>Log a row 🚣</h3>
   <img id="r-snap" class="photo-thumb" style="display:none;max-height:300px;object-fit:contain;background:#000;margin:0 0 14px;" alt="erg screen" onclick="this.style.maxHeight=this.style.maxHeight?'':'300px'">
+  <button class="btn ghost" type="button" id="ocrBtn" style="display:none;margin-bottom:14px;" onclick="readErg()">🔍 Read numbers from photo</button>
   <div class="seg" style="margin-bottom:16px;">
     <button id="rt-erg" class="on" onclick="setRowType('erg')">Erg</button>
     <button id="rt-water" onclick="setRowType('water')">On water</button>
@@ -635,7 +636,7 @@
     <div class="chips" id="feelChips"></div>
   </div>
   <div class="field">
-    <label>Photo of the monitor <span class="muted">(optional)</span></label>
+    <label>Photo of the monitor or ErgZone screenshot <span class="muted">(optional)</span></label>
     <input type="file" id="r-photo" accept="image/*" style="display:none;" onchange="photoPicked(this)">
     <button class="btn ghost" type="button" id="photoBtn" onclick="document.getElementById('r-photo').click()">📷 Snap the erg screen</button>
     <div id="photoPreviewWrap">
@@ -843,10 +844,57 @@ function showRowPhoto(b){
   document.getElementById('photoPreview').src=URL.createObjectURL(b);
   document.getElementById('photoPreviewWrap').style.display='block';
   document.getElementById('photoBtn').textContent='📷 Change photo';
+  document.getElementById('ocrBtn').style.display='flex';
 }
 function photoPicked(inp){
   const f=inp.files&&inp.files[0]; if(!f)return;
-  shrink(f).then(showRowPhoto);
+  shrink(f).then(b=>{ showRowPhoto(b); readErg(true); });
+}
+
+/* =================== READ NUMBERS FROM A PHOTO / SCREENSHOT (Tesseract OCR, loaded on first use) =================== */
+// ponytail: generic regex over OCR text — works best on clean ErgZone/ErgData screenshots; LCD photos are hit-or-miss, so he always confirms.
+let tessP=null;
+function loadTess(){
+  return tessP||(tessP=new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    sc.onload=()=>Tesseract.createWorker('eng').then(res,rej);
+    sc.onerror=rej; document.head.appendChild(sc);
+  }).catch(e=>{tessP=null;throw e;}));
+}
+function parseErg(t){
+  t=t.replace(/[\dOo]*\d[\dOo]*/g,x=>x.replace(/[Oo]/g,'0')).replace(/(\d),(\d)/g,'$1$2');
+  // skip clock times ("9:41", "8:12 PM"): erg times carry tenths, so prefer those when present
+  const times=[...t.matchAll(/(?<![\d:])((?:\d{1,2}:)?\d{1,2}:\d{2}(?:\.\d)?)(?![\d:])(?!\s*[ap]\.?m\b)(\s*\/\s*500)?/gi)].map(m=>{
+    const p=m[1].split(':').map(Number), secs=p.length===3?p[0]*3600+p[1]*60+p[2]:p[0]*60+p[1];
+    return {secs, split:!!m[2], tenth:m[1].includes('.')};
+  });
+  const dists=[...t.matchAll(/(?<![\/\d.:])(\d{3,5})\s*m(?![a-z])/gi)].map(m=>Number(m[1])).filter(d=>d>=100&&d<=50000);
+  const rateM=[...t.matchAll(/(?<!\d)(\d{2})\s*(?:s\s*\/\s*m|spm)/gi)].pop()||t.match(/(?<!heart\s*)rate\D{0,4}(\d{2})(?!\d)/i);
+  const out={dist:dists.length?Math.max(...dists):0, secs:0, rate:rateM&&+rateM[1]>=14&&+rateM[1]<=50?+rateM[1]:0};
+  let totals=times.filter(x=>!x.split); const splits=times.filter(x=>x.split);
+  if(totals.some(x=>x.tenth)) totals=totals.filter(x=>x.tenth);
+  if(totals.length) out.secs=Math.max(...totals.map(x=>x.secs));
+  if(!out.secs && splits.length && out.dist) out.secs=Math.round(splits[0].secs*out.dist/500*10)/10;
+  return out;
+}
+function fmtClock(secs){ const m=Math.floor(secs/60), s=secs-m*60; return m+':'+(s<10?'0':'')+(Math.round(s*10)/10); }
+async function readErg(auto){
+  if(!pendingPhoto)return;
+  const btn=document.getElementById('ocrBtn'), photo=pendingPhoto;
+  btn.disabled=true; btn.textContent='🔍 Reading the numbers…';
+  try{
+    const w=await loadTess();
+    const {data:{text}}=await w.recognize(photo);
+    if(photo!==pendingPhoto || !openSheetEl || openSheetEl.id!=='rowSheet')return;
+    const r=parseErg(text);
+    // auto-read never overwrites what he already typed; the button does
+    const fill=(id,v)=>{ const el=document.getElementById(id); if(v&&(!auto||!el.value)) el.value=v; };
+    fill('r-dist',r.dist); fill('r-time',r.secs&&fmtClock(r.secs)); fill('r-rate',r.rate);
+    calcSplit();
+    toast(r.dist||r.secs?'✅ Got it — double-check the numbers':'🤔 Couldn\'t read it — type them in');
+  }catch(e){ if(photo===pendingPhoto) toast('📶 Needs internet to read photos'); }
+  finally{ if(photo===pendingPhoto){ btn.disabled=false; btn.textContent='🔍 Read numbers from photo'; } }
 }
 
 /* =================== SNAPS (home Row/Food buttons → camera → end-of-day inbox) =================== */
@@ -864,7 +912,7 @@ async function logSnap(id){
   const sn=state.snaps.find(x=>x.id===id); if(!sn)return;
   const b=await PDB.get(id);
   if(sn.kind==='row'){ openRow(); fromSnap=sn;
-    if(b){ showRowPhoto(b); const im=document.getElementById('r-snap'); im.src=URL.createObjectURL(b); im.style.display='block'; } }
+    if(b){ showRowPhoto(b); const im=document.getElementById('r-snap'); im.src=URL.createObjectURL(b); im.style.display='block'; readErg(true); } }
   else { openFood(); fromSnap=sn; foodMeal=guessMeal(sn.ts); renderFoodChips();
     if(b){ const im=document.getElementById('f-photo'); im.src=URL.createObjectURL(b); im.style.display='block'; } }
 }
@@ -877,6 +925,7 @@ function discardSnap(id){ if(confirm('Delete this photo?')){ dropSnap(id,false);
 function clearPhoto(){
   pendingPhoto=null;
   document.getElementById('r-snap').style.display='none';
+  document.getElementById('ocrBtn').style.display='none';
   const fi=document.getElementById('r-photo'); if(fi)fi.value='';
   document.getElementById('photoPreviewWrap').style.display='none';
   document.getElementById('photoBtn').textContent='📷 Snap the erg screen';
