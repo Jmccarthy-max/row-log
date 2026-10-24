@@ -280,10 +280,11 @@
         <button class="bigbtn b-water" onclick="openWaterCount()"><span class="e">💧</span>Water<span class="s" id="bb-water">0 / 3</span></button>
         <button class="bigbtn b-food" onclick="snap('food')"><span class="e">📷</span>Food<span class="s" id="bb-food">snap your plate</span></button>
         <button class="bigbtn b-lift" onclick="go('lift')"><span class="e">🏋️</span>Lift<span class="s" id="bb-lift">add workout</span></button>
-        <button class="bigbtn b-row" onclick="snap('row')"><span class="e">🚣</span>Row<span class="s" id="bb-row">snap the erg</span></button>
+        <button class="bigbtn b-row" onclick="openRowChoice()"><span class="e">🚣</span>Row<span class="s" id="bb-row">log or snap</span></button>
       </div>
       <button class="bigbtn b-eod" onclick="go('eod')"><span class="e">🌙</span>End of day<span class="s" id="bb-eod">nothing to log yet</span></button>
       <input type="file" id="snapInput" accept="image/*" capture="environment" style="display:none;" onchange="snapPicked(this)">
+      <input type="file" id="snapLib" accept="image/*" style="display:none;" onchange="snapPicked(this)">
       <button class="btn ghost" onclick="go('home')" style="padding:16px;font-size:17px;">🏠 Home — stats, water, today's activity</button>
     </section>
 
@@ -714,6 +715,22 @@
   <button class="btn food" onclick="saveFood()">Save food</button>
 </div>
 
+<!-- Row choice sheet (home Row button) -->
+<div class="sheet" id="rowChoiceSheet">
+  <div class="grip"></div>
+  <h3>Row 🚣</h3>
+  <div id="rc-main">
+    <button class="btn row" style="padding:18px;font-size:17px;margin-bottom:10px;" onclick="closeSheet();openRow()">✍️ Log a row now</button>
+    <button class="btn ghost" style="padding:18px;font-size:17px;" onclick="rowChoicePhoto(true)">📷 Photo (erg screen or ErgZone)</button>
+  </div>
+  <div id="rc-photo" style="display:none;">
+    <button class="btn row" style="padding:18px;font-size:17px;margin-bottom:10px;" onclick="closeSheet();snapKind='row';document.getElementById('snapInput').click()">📸 Take a photo</button>
+    <button class="btn ghost" style="padding:18px;font-size:17px;margin-bottom:10px;" onclick="closeSheet();snapKind='row';document.getElementById('snapLib').click()">🖼️ Upload a photo or screenshot</button>
+    <div class="fab-note" style="margin-bottom:12px;">Saved for End of day — log it whenever you're ready.</div>
+    <button class="btn ghost small" style="margin:0 auto;" onclick="rowChoicePhoto(false)">← Back</button>
+  </div>
+</div>
+
 <!-- Water count sheet -->
 <div class="sheet" id="waterSheet">
   <div class="grip"></div>
@@ -795,7 +812,8 @@ let openSheetEl=null;
 function showSheet(id){
   openSheetEl=document.getElementById(id);
   document.getElementById('modalBg').classList.add('show');
-  requestAnimationFrame(()=>openSheetEl.classList.add('show'));
+  const el=openSheetEl;
+  requestAnimationFrame(()=>{ if(openSheetEl===el) el.classList.add('show'); });
 }
 function closeSheet(){
   if(openSheetEl)openSheetEl.classList.remove('show');
@@ -1021,15 +1039,23 @@ async function readErg(auto){
 }
 
 /* =================== SNAPS (home Row/Food buttons → camera → end-of-day inbox) =================== */
-let snapKind='row', fromSnap=null;
+let snapKind='row', fromSnap=null, lastSnapId=0;
 function snap(kind){ snapKind=kind; document.getElementById('snapInput').click(); }
+function openRowChoice(){ rowChoicePhoto(false); showSheet('rowChoiceSheet'); }
+function rowChoicePhoto(on){
+  document.getElementById('rc-main').style.display=on?'none':'block';
+  document.getElementById('rc-photo').style.display=on?'block':'none';
+}
 async function snapPicked(inp){
   const f=inp.files&&inp.files[0]; inp.value=''; if(!f)return;
-  const b=await shrink(f), id=Date.now();
+  const b=await shrink(f), id=lastSnapId=Math.max(Date.now(),lastSnapId+1);
+  // an uploaded photo from earlier in the week logs to the day it was taken
+  const lm=f.lastModified, ts=(lm&&lm<=id&&id-lm<14*864e5)?lm:id;
   try{ await PDB.put(id,b); }catch(e){ alert('Could not save the photo on this phone.'); return; }
-  state.snaps.push({id,ts:id,date:TODAY,kind:snapKind});
+  state.snaps.push({id,ts,date:todayKey(new Date(ts)),kind:snapKind});
   persist(); renderAll();
-  toast(snapKind==='row'?'🚣 Erg photo saved — log it at end of day':'🍽️ Food photo saved — log it at end of day');
+  const d=state.snaps.at(-1).date, when=d===todayKey()?'':' (filed under '+fmtDay(d)+')';
+  toast((snapKind==='row'?'🚣 Erg photo saved':'🍽️ Food photo saved')+(when||' — log it at end of day'));
 }
 async function logSnap(id){
   const sn=state.snaps.find(x=>x.id===id); if(!sn)return;
@@ -1834,7 +1860,7 @@ function renderStart(){
   document.getElementById('bb-water').textContent=w+' / '+state.goalCups+' bottles';
   const rs=state.rows.filter(r=>r.date===TODAY).length+state.snaps.filter(x=>x.kind==='row'&&x.date===TODAY).length;
   const fs=state.foods.filter(f=>f.date===TODAY).length+state.snaps.filter(x=>x.kind==='food'&&x.date===TODAY).length;
-  document.getElementById('bb-row').textContent=rs?rs+' today · snap another':'snap the erg';
+  document.getElementById('bb-row').textContent=rs?rs+' today · log or snap':'log or snap';
   document.getElementById('bb-food').textContent=fs?fs+' today · snap another':'snap your plate';
   const n=state.snaps.length;
   document.getElementById('bb-eod').textContent=n? n+' photo'+(n>1?'s':'')+' to log':'nothing waiting to log';
