@@ -250,6 +250,11 @@
   .snap img{width:100%;max-height:340px;object-fit:contain;background:#000;border-radius:12px;display:block;cursor:pointer;}
   .snap .meta{font-size:13px;color:var(--muted);font-weight:700;margin:9px 2px;}
 
+  .rep{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .rep .n{width:52px;flex:none;font-weight:800;color:var(--muted);font-size:14px;}
+  .rep input{width:96px;flex:none;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);}
+  .rep .r{flex:1;font-size:13px;color:var(--muted);text-align:right;}
+
   /* ---------- Toast ---------- */
   #toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-b));transform:translateX(-50%) translateY(20px);
     background:var(--accent2);color:#3a2c00;font-weight:800;font-size:15px;
@@ -608,18 +613,47 @@
     <button id="rt-erg" class="on" onclick="setRowType('erg')">Erg</button>
     <button id="rt-water" onclick="setRowType('water')">On water</button>
   </div>
-  <div class="field">
+  <div class="seg" style="margin-bottom:16px;">
+    <button id="wk-single" class="on" onclick="setWk(false)">One piece</button>
+    <button id="wk-int" onclick="setWk(true)">Intervals / reps</button>
+  </div>
+  <div id="intFields" style="display:none;">
+    <div class="grid2">
+      <div class="field">
+        <label>How many reps</label>
+        <input type="number" inputmode="numeric" id="i-reps" value="4" min="1" max="30" oninput="renderRepRows()">
+      </div>
+      <div class="field">
+        <label>Each rep is</label>
+        <div class="seg" style="margin:0;">
+          <button id="it-dist" class="on" onclick="setRepType('dist')">Distance</button>
+          <button id="it-time" onclick="setRepType('time')">Time</button>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label id="i-val-lbl">Rep distance (meters)</label>
+      <input type="text" inputmode="decimal" id="i-val" placeholder="500" oninput="renderRepTotals()">
+      <div class="chips" style="margin-top:9px;" id="repValChips"></div>
+    </div>
+    <div class="field">
+      <label>Split /500m for each rep</label>
+      <div id="repRows"></div>
+    </div>
+    <div class="card" id="repTotals" style="padding:11px 14px;margin-bottom:13px;font-size:14px;"></div>
+  </div>
+  <div class="field" id="distField">
     <label>Distance (meters)</label>
     <input type="number" inputmode="numeric" id="r-dist" placeholder="e.g. 2000">
     <div class="chips" style="margin-top:9px;" id="distChips"></div>
   </div>
   <div class="grid2">
-    <div class="field">
+    <div class="field" id="timeField">
       <label>Time (mm:ss)</label>
       <input type="text" inputmode="numeric" id="r-time" placeholder="7:30">
     </div>
     <div class="field" id="rateField">
-      <label>Stroke rate (spm)</label>
+      <label id="rateLbl">Stroke rate (spm)</label>
       <input type="number" inputmode="numeric" id="r-rate" placeholder="24">
     </div>
   </div>
@@ -768,6 +802,8 @@ const FEELS=['💪 Strong','😊 Good','😐 Okay','🥵 Tough','😴 Tired'];
 
 function openRow(){
   rowType='erg'; rowFeel=''; fromSnap=null;
+  document.getElementById('i-reps').value=4; document.getElementById('repRows').innerHTML=''; repVals=[];
+  setRepType('dist'); setWk(false);
   document.getElementById('r-snap').style.display='none';
   setRowType('erg');
   clearPhoto();
@@ -781,6 +817,71 @@ function renderRowChips(){
   renderChips('boatChips', BOATS.map(b=>({v:b,l:b})), v=>{rowBoat=v;renderRowChips();}, ()=>rowBoat);
   renderChips('feelChips', FEELS.map(f=>({v:f,l:f})), v=>{rowFeel=(rowFeel===v?'':v);renderRowChips();}, ()=>rowFeel);
 }
+/* ---- intervals: N reps of a set distance or time, one split per rep ---- */
+let wkInt=false, repType='dist', repVals=[]; // repVals keeps typed splits while the rep count changes
+const REP_DIST=[250,500,1000,1500,2000], REP_TIME=['1:00','2:00','4:00','5:00','10:00'];
+function setWk(on){
+  wkInt=on;
+  document.getElementById('wk-single').classList.toggle('on',!on);
+  document.getElementById('wk-int').classList.toggle('on',on);
+  syncRowFields(); if(on) renderRepRows();
+}
+function setRepType(t){
+  repType=t;
+  document.getElementById('it-dist').classList.toggle('on',t==='dist');
+  document.getElementById('it-time').classList.toggle('on',t==='time');
+  document.getElementById('i-val-lbl').textContent = t==='dist'?'Rep distance (meters)':'Rep time (mm:ss)';
+  const v=document.getElementById('i-val'); v.value=''; v.placeholder = t==='dist'?'500':'2:00';
+  renderChips('repValChips', (t==='dist'?REP_DIST.map(d=>({v:String(d),l:d+'m'})):REP_TIME.map(x=>({v:x,l:x}))),
+    x=>{v.value=x;renderRepTotals();}, null);
+  renderRepTotals();
+}
+function syncRowFields(){
+  const erg=rowType==='erg';
+  document.getElementById('intFields').style.display = wkInt?'block':'none';
+  document.getElementById('distField').style.display = wkInt?'none':'block';
+  document.getElementById('timeField').style.display = wkInt?'none':'block';
+  document.getElementById('splitRow').style.display = erg&&!wkInt?'block':'none';
+  document.getElementById('rateLbl').textContent = wkInt?'Avg stroke rate (spm)':'Stroke rate (spm)';
+}
+function renderRepRows(){
+  const el=document.getElementById('i-reps');
+  let n=Number(el.value)||0;
+  if(n<1) return;                       // mid-edit (blank) — keep current rows
+  if(n>30){ n=30; el.value=30; }
+  const box=document.getElementById('repRows');
+  let h='';
+  for(let i=0;i<n;i++) h+=`<div class="rep"><span class="n">Rep ${i+1}</span><input type="text" inputmode="decimal" placeholder="1:45.0" value="${escapeHtml(repVals[i]||'')}" oninput="repVals[${i}]=this.value;renderRepTotals()"><span class="r"></span></div>`;
+  box.innerHTML=h; renderRepTotals();
+}
+function repVal(){ const v=document.getElementById('i-val').value.trim(), x=repType==='dist'? Number(v)||0 : parseTime(v); return x>0?x:0; }
+// one rep: split (sec/500m) + rep size → {m, secs}
+function repResult(split){
+  const v=repVal(); if(!v||!split) return null;
+  return repType==='dist'? {m:v, secs:split*v/500} : {m:Math.round(v/split*500), secs:v};
+}
+function repTotals(splits){
+  const v=repVal(), all=splits.length&&splits.every(Boolean);
+  let m=0, secs=0;
+  if(repType==='dist'){ m=v*splits.length; secs= all? splits.reduce((a,sp)=>a+sp*v/500,0):0; }
+  else { // meters only from reps that have a split
+    secs=v*splits.length; m=splits.reduce((a,sp)=>a+(sp?Math.round(v/sp*500):0),0);
+    if(!all) return {m, secs, avg:null};
+  }
+  return {m, secs, avg: m&&secs? secs/m*500 : null};
+}
+function readSplits(){ return [...document.querySelectorAll('#repRows input')].map(i=>{ const x=parseTime(i.value); return x>0?x:null; }); }
+function renderRepTotals(){
+  const splits=readSplits();
+  document.querySelectorAll('#repRows .rep').forEach((row,i)=>{
+    const r=repResult(splits[i]);
+    row.querySelector('.r').textContent = r? (repType==='dist'? 'rep time '+fmtSplit(r.secs) : r.m.toLocaleString()+' m') : '';
+  });
+  const t=repTotals(splits);
+  document.getElementById('repTotals').innerHTML = repVal()
+    ? `<b>Total:</b> ${t.m?t.m.toLocaleString()+' m':'—'} · ${t.secs?fmtSplit(t.secs):'—'} · avg ${fmtSplit(t.avg)}/500`
+    : '<span class="muted">Pick the rep distance or time, then type each split.</span>';
+}
 function setRowType(t){
   rowType=t;
   document.getElementById('rt-erg').classList.toggle('on',t==='erg');
@@ -788,6 +889,7 @@ function setRowType(t){
   document.getElementById('rateField').style.display = t==='erg'?'block':'none';
   document.getElementById('splitRow').style.display = t==='erg'?'block':'none';
   document.getElementById('boatField').style.display = t==='water'?'block':'none';
+  syncRowFields();
 }
 function parseTime(str){
   if(!str)return 0;
@@ -880,7 +982,7 @@ function parseErg(t){
 }
 function fmtClock(secs){ const m=Math.floor(secs/60), s=secs-m*60; return m+':'+(s<10?'0':'')+(Math.round(s*10)/10); }
 async function readErg(auto){
-  if(!pendingPhoto)return;
+  if(!pendingPhoto || (auto && wkInt))return; // OCR fills one-piece fields only
   const btn=document.getElementById('ocrBtn'), photo=pendingPhoto;
   btn.disabled=true; btn.textContent='🔍 Reading the numbers…';
   try{
@@ -960,15 +1062,25 @@ function fmtSplit(s){
   return m+':'+String(whole).padStart(2,'0')+(tenth?'.'+tenth:'');
 }
 function saveRow(){
-  const dist=Number(document.getElementById('r-dist').value)||0;
-  const timeStr=document.getElementById('r-time').value.trim();
-  const secs=parseTime(timeStr);
-  if(!dist && !secs){ alert('Add a distance or time first.'); return; }
-  calcSplit();
+  let dist, secs, timeStr, split, iv=null;
+  if(wkInt){
+    const splits=readSplits(), v=repVal();
+    if(!v){ alert(repType==='dist'?'How long is each rep (meters)?':'How long is each rep (mm:ss)?'); return; }
+    if(!splits.some(Boolean)){ alert('Type at least one split.'); return; }
+    const t=repTotals(splits);
+    dist=t.m; secs=Math.round(t.secs*10)/10; timeStr=secs?fmtSplit(secs):''; split=fmtSplit(t.avg);
+    iv={n:splits.length, kind:repType, val:v, splits};
+  } else {
+    dist=Number(document.getElementById('r-dist').value)||0;
+    timeStr=document.getElementById('r-time').value.trim();
+    secs=parseTime(timeStr);
+    if(!dist && !secs){ alert('Add a distance or time first.'); return; }
+    calcSplit(); split=document.getElementById('r-split').value;
+  }
   const sn=fromSnap;
   const entry={
     id:sn?sn.id:Date.now(), ts:sn?sn.ts:Date.now(), date:sn?sn.date:TODAY, type:rowType,
-    dist, secs, timeStr, split:document.getElementById('r-split').value,
+    dist, secs, timeStr, split, iv,
     rate:Number(document.getElementById('r-rate').value)||null,
     boat: rowType==='water'?rowBoat:null,
     feel:rowFeel, notes:document.getElementById('r-notes').value.trim(),
@@ -978,8 +1090,8 @@ function saveRow(){
   // PR check: fastest split at this distance+type so far?
   const mySplit=splitSec(entry);
   let isPR=false;
-  if(mySplit){
-    const prev=state.rows.filter(r=>r.type===entry.type&&r.dist===entry.dist&&splitSec(r));
+  if(mySplit && !entry.iv){
+    const prev=state.rows.filter(r=>!r.iv&&r.type===entry.type&&r.dist===entry.dist&&splitSec(r));
     isPR = prev.length>0 && prev.every(r=>mySplit<splitSec(r));
   }
   state.rows.push(entry);
@@ -1067,11 +1179,16 @@ function delRow(id){ if(confirm('Delete this row?')){state.rows=state.rows.filte
 function delFood(id){ if(confirm('Delete this entry?')){state.foods=state.foods.filter(f=>f.id!==id);PDB.del(id);persist();renderAll();} }
 
 /* =================== RENDER =================== */
+function ivLabel(iv){ return iv.n+' × '+(iv.kind==='dist'? iv.val.toLocaleString()+'m' : fmtSplit(iv.val)); }
+function ivSplitsHTML(r){
+  return r.iv? `<div class="d" style="margin-top:3px;">Splits: ${r.iv.splits.map(sp=>sp?fmtSplit(sp):'—').join(' · ')}</div>`:'';
+}
 function rowSummary(r){
   const parts=[];
+  if(r.iv) parts.push(ivLabel(r.iv));
   if(r.dist)parts.push(r.dist.toLocaleString()+' m');
   if(r.timeStr)parts.push(r.timeStr);
-  if(r.type==='erg'&&r.split&&r.split!=='—')parts.push(r.split+'/500');
+  if((r.type==='erg'||r.iv)&&r.split&&r.split!=='—')parts.push((r.iv?'avg ':'')+r.split+'/500');
   if(r.rate)parts.push('r'+r.rate);
   if(r.boat)parts.push(r.boat);
   return parts.join(' · ');
@@ -1150,7 +1267,7 @@ let progDist=null;
 function renderProgress(){
   const card=document.getElementById('progressCard');
   // erg rows with a valid split, grouped by distance
-  const ergs=state.rows.filter(r=>r.type==='erg'&&splitSec(r));
+  const ergs=state.rows.filter(r=>r.type==='erg'&&!r.iv&&splitSec(r)); // interval totals aren't comparable to single pieces
   const byDist={};
   ergs.forEach(r=>{(byDist[r.dist]=byDist[r.dist]||[]).push(r);});
   const dists=Object.keys(byDist).map(Number).sort((a,b)=>a-b);
@@ -1247,6 +1364,7 @@ function renderRowView(){
         <div class="body">
           <div class="t">${r.type==='erg'?'Erg':'On water'}</div>
           <div class="d">${rowSummary(r)||'—'} · ${fmtTime(r.ts)}</div>
+          ${ivSplitsHTML(r)}
           ${r.notes?`<div class="d" style="margin-top:4px;font-style:italic;">“${escapeHtml(r.notes)}”</div>`:''}
           ${photoThumbHTML(r)}
           ${tags?`<div class="tags">${tags}</div>`:''}
