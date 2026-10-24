@@ -138,7 +138,10 @@
     transition:transform .3s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto;}
   .sheet.show{transform:translateY(0);}
   .sheet .grip{width:40px;height:5px;background:var(--line);border-radius:3px;margin:8px auto 14px;}
-  .sheet h3{margin:0 0 16px;font-size:19px;}
+  .sheet h3{margin:0 0 16px;font-size:19px;padding-right:48px;}
+  #waterSheet h3{padding:0 48px;}
+  .sheet .x{position:sticky;top:4px;z-index:3;display:block;margin:-6px 0 -38px auto;width:38px;height:38px;
+    border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--muted);font-size:17px;line-height:1;}
 
   /* ---------- Tips ---------- */
   .search{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:14px;
@@ -221,7 +224,7 @@
     margin-top:8px;border:1px solid var(--line);display:block;cursor:pointer;}
   #photoPreviewWrap{display:none;margin-top:10px;position:relative;}
   #photoPreview{width:100%;border-radius:12px;display:block;border:1px solid var(--line);}
-  #photoPreviewWrap .rm{position:absolute;top:8px;right:8px;width:32px;height:32px;
+  #photoPreviewWrap .rm{position:absolute;top:8px;left:8px;width:32px;height:32px;
     border-radius:999px;background:rgba(4,8,18,.75);color:#fff;font-size:18px;line-height:1;}
   #photoViewer{position:fixed;inset:0;z-index:120;background:rgba(4,8,18,.93);
     display:none;align-items:center;justify-content:center;padding:18px;}
@@ -609,6 +612,7 @@
 <!-- Row sheet -->
 <div class="sheet" id="rowSheet">
   <div class="grip"></div>
+  <button class="x" type="button" aria-label="Close" onclick="closeSheet()">✕</button>
   <h3>Log a row 🚣</h3>
   <img id="r-snap" class="photo-thumb" style="display:none;max-height:300px;object-fit:contain;background:#000;margin:0 0 14px;" alt="erg screen" onclick="this.style.maxHeight=this.style.maxHeight?'':'300px'">
   <button class="btn ghost" type="button" id="ocrBtn" style="display:none;margin-bottom:14px;" onclick="readErg()">🔍 Read numbers from photo</button>
@@ -693,11 +697,13 @@
     <textarea id="r-notes" placeholder="Anything to remember…"></textarea>
   </div>
   <button class="btn row" onclick="saveRow()">Save row</button>
+  <button class="btn ghost" style="margin-top:10px;" onclick="closeSheet()">Cancel</button>
 </div>
 
 <!-- Food sheet -->
 <div class="sheet" id="foodSheet">
   <div class="grip"></div>
+  <button class="x" type="button" aria-label="Close" onclick="closeSheet()">✕</button>
   <h3>Log food 🍽️</h3>
   <img id="f-photo" class="photo-thumb" style="display:none;max-height:260px;object-fit:contain;background:#000;margin:0 0 14px;" alt="food photo">
   <div class="field">
@@ -713,11 +719,13 @@
     <input type="number" inputmode="numeric" id="f-cal" placeholder="—">
   </div>
   <button class="btn food" onclick="saveFood()">Save food</button>
+  <button class="btn ghost" style="margin-top:10px;" onclick="closeSheet()">Cancel</button>
 </div>
 
 <!-- Row choice sheet (home Row button) -->
 <div class="sheet" id="rowChoiceSheet">
   <div class="grip"></div>
+  <button class="x" type="button" aria-label="Close" onclick="closeSheet()">✕</button>
   <h3>Row 🚣</h3>
   <div id="rc-main">
     <button class="btn row" style="padding:18px;font-size:17px;margin-bottom:10px;" onclick="closeSheet();openRow()">✍️ Log a row now</button>
@@ -734,6 +742,7 @@
 <!-- Water count sheet -->
 <div class="sheet" id="waterSheet">
   <div class="grip"></div>
+  <button class="x" type="button" aria-label="Close" onclick="closeSheet()">✕</button>
   <h3 style="text-align:center;">Bottles today 💧</h3>
   <div class="counter">
     <button class="btn ghost" onclick="addWater(-1)">–</button>
@@ -747,6 +756,7 @@
 <!-- Water goal sheet -->
 <div class="sheet" id="goalSheet">
   <div class="grip"></div>
+  <button class="x" type="button" aria-label="Close" onclick="closeSheet()">✕</button>
   <h3>Daily water goal 💧</h3>
   <div class="field">
     <label>Bottles per day</label>
@@ -1034,7 +1044,7 @@ async function readErg(auto){
     fill('r-dist',r.dist); fill('r-time',r.secs&&fmtClock(r.secs)); fill('r-rate',r.rate);
     calcSplit();
     toast(r.dist||r.secs?'✅ Got it — double-check the numbers':'🤔 Couldn\'t read it — type them in');
-  }catch(e){ if(photo===pendingPhoto) toast('📶 Needs internet to read photos'); }
+  }catch(e){ if(photo===pendingPhoto && openSheetEl && openSheetEl.id==='rowSheet') toast('📶 Needs internet to read photos'); }
   finally{ if(photo===pendingPhoto){ btn.disabled=false; btn.textContent='🔍 Read numbers from photo'; } }
 }
 
@@ -1074,6 +1084,7 @@ function discardSnap(id){ if(confirm('Delete this photo?')){ dropSnap(id,false);
 function clearPhoto(){
   pendingPhoto=null;
   document.getElementById('r-snap').style.display='none';
+  const ob=document.getElementById('ocrBtn'); ob.disabled=false; ob.textContent='🔍 Read numbers from photo';
   document.getElementById('ocrBtn').style.display='none';
   const fi=document.getElementById('r-photo'); if(fi)fi.value='';
   document.getElementById('photoPreviewWrap').style.display='none';
