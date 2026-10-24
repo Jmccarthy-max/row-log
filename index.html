@@ -644,10 +644,17 @@
     </div>
     <div class="card" id="repTotals" style="padding:11px 14px;margin-bottom:13px;font-size:14px;"></div>
   </div>
+  <div class="field" id="byField">
+    <label>Piece is set by</label>
+    <div class="seg" style="margin:0 0 9px;">
+      <button id="by-dist" class="on" onclick="setBy('dist');byPicked=true">Distance</button>
+      <button id="by-time" onclick="setBy('time');byPicked=true">Time</button>
+    </div>
+    <div class="chips" id="pieceChips"></div>
+  </div>
   <div class="field" id="distField">
     <label>Distance (meters)</label>
     <input type="number" inputmode="numeric" id="r-dist" placeholder="e.g. 2000">
-    <div class="chips" style="margin-top:9px;" id="distChips"></div>
   </div>
   <div class="grid2">
     <div class="field" id="timeField">
@@ -810,7 +817,8 @@ function openRow(){
   setRowType('erg');
   clearPhoto();
   ['r-dist','r-time','r-rate','r-split','r-notes'].forEach(i=>document.getElementById(i).value='');
-  renderChips('distChips', DIST_PRESETS.map(d=>({v:d,l:d+'m'})), v=>{document.getElementById('r-dist').value=v;calcSplit();}, null);
+  setBy('dist'); byPicked=false;
+  document.getElementById('rowSheet').scrollTop=0;
   renderChips('boatChips', BOATS.map(b=>({v:b,l:b})), v=>{rowBoat=v;renderRowChips();}, ()=>rowBoat);
   renderChips('feelChips', FEELS.map(f=>({v:f,l:f})), v=>{rowFeel=(rowFeel===v?'':v);renderRowChips();}, ()=>rowFeel);
   showSheet('rowSheet');
@@ -838,9 +846,20 @@ function setRepType(t){
     x=>{v.value=x;renderRepTotals();}, null);
   renderRepTotals();
 }
+/* one piece: set by distance (2k test) or by time (30:00 piece) — drives progress grouping */
+let pieceBy='dist', byPicked=false; // only saved when he taps it; otherwise workoutKey guesses
+const TIME_PRESETS=['10:00','20:00','30:00','40:00','60:00'];
+function setBy(t){
+  pieceBy=t;
+  document.getElementById('by-dist').classList.toggle('on',t==='dist');
+  document.getElementById('by-time').classList.toggle('on',t==='time');
+  renderChips('pieceChips', t==='dist'? DIST_PRESETS.map(d=>({v:d,l:d+'m'})) : TIME_PRESETS.map(x=>({v:x,l:x})),
+    v=>{ document.getElementById(t==='dist'?'r-dist':'r-time').value=v; calcSplit(); }, null);
+}
 function syncRowFields(){
   const erg=rowType==='erg';
   document.getElementById('intFields').style.display = wkInt?'block':'none';
+  document.getElementById('byField').style.display = wkInt?'none':'block';
   document.getElementById('distField').style.display = wkInt?'none':'block';
   document.getElementById('timeField').style.display = wkInt?'none':'block';
   document.getElementById('splitRow').style.display = erg&&!wkInt?'block':'none';
@@ -1082,7 +1101,7 @@ function saveRow(){
   const sn=fromSnap;
   const entry={
     id:sn?sn.id:Date.now(), ts:sn?sn.ts:Date.now(), date:sn?sn.date:TODAY, type:rowType,
-    dist, secs, timeStr, split, iv,
+    dist, secs, timeStr, split, iv, by: iv||!byPicked?null:pieceBy,
     rate:Number(document.getElementById('r-rate').value)||null,
     boat: rowType==='water'?rowBoat:null,
     feel:rowFeel, notes:document.getElementById('r-notes').value.trim(),
@@ -1092,8 +1111,8 @@ function saveRow(){
   // PR check: fastest split at this distance+type so far?
   const mySplit=splitSec(entry);
   let isPR=false;
-  if(mySplit && !entry.iv){
-    const prev=state.rows.filter(r=>!r.iv&&r.type===entry.type&&r.dist===entry.dist&&splitSec(r));
+  if(mySplit && !entry.iv && entry.by!=='time'){
+    const prev=state.rows.filter(r=>!r.iv&&r.by!=='time'&&r.type===entry.type&&r.dist===entry.dist&&splitSec(r));
     isPR = prev.length>0 && prev.every(r=>mySplit<splitSec(r));
   }
   state.rows.push(entry);
@@ -1270,7 +1289,9 @@ let progKey=null;
 function workoutKey(r){
   const pre=r.type==='water'?'🌊 ':'';
   if(r.iv) return pre+ivLabel(r.iv);
-  // ponytail: rows don't record whether a piece was set by distance or time — round meters = distance piece, else round minutes = timed piece
+  if(r.by==='time'&&r.secs) return pre+fmtSplit(r.secs);
+  if(r.by==='dist'&&r.dist) return pre+r.dist.toLocaleString()+'m';
+  // older rows have no `by` — ponytail: rows don't record whether a piece was set by distance or time — round meters = distance piece, else round minutes = timed piece
   if(r.dist && (r.dist%500===0 || !r.secs || r.secs%60)) return pre+r.dist.toLocaleString()+'m';
   if(r.secs) return pre+fmtSplit(r.secs);
   return null;
