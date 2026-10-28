@@ -671,6 +671,7 @@
       <input type="number" inputmode="numeric" id="r-rate" placeholder="24">
     </div>
   </div>
+  <div class="field" id="partsBox" style="display:none;"></div>
   <div class="field" id="splitRow">
     <label>Split /500m <span class="muted">(auto)</span></label>
     <input type="text" id="r-split" placeholder="—" readonly>
@@ -845,7 +846,7 @@ function openRow(){
   setRowType('erg');
   clearPhoto();
   ['r-dist','r-time','r-rate','r-split','r-notes'].forEach(i=>document.getElementById(i).value='');
-  setBy('dist'); byPicked=false;
+  setBy('dist'); byPicked=false; setParts(null);
   document.getElementById('rowSheet').scrollTop=0;
   renderChips('boatChips', BOATS.map(b=>({v:b,l:b})), v=>{rowBoat=v;renderRowChips();}, ()=>rowBoat);
   renderChips('feelChips', FEELS.map(f=>({v:f,l:f})), v=>{rowFeel=(rowFeel===v?'':v);renderRowChips();}, ()=>rowFeel);
@@ -863,6 +864,8 @@ function setWk(on){
   document.getElementById('wk-single').classList.toggle('on',!on);
   document.getElementById('wk-int').classList.toggle('on',on);
   syncRowFields(); if(on) renderRepRows();
+  if(on&&pendingParts&&!repVals.some(Boolean)) partsToReps();
+  renderParts();
 }
 function setRepType(t){
   repType=t;
@@ -1002,8 +1005,39 @@ function shrink(f){ return new Promise(res=>{
   };
   img.src=URL.createObjectURL(f);
 });}
+let pendingParts=null, pendingExtra=null; // split rows + watts/HR/cal/raw text read off the photo
+function setParts(r,raw){
+  pendingParts=r&&r.parts&&r.parts.length?r.parts:null;
+  pendingExtra=r?{watts:r.watts||null,hr:r.hr||null,cal:r.cal||null,ocr:raw||r.raw||null}:null;
+  renderParts();
+  if(pendingParts){
+    const P=pendingParts, sm=P.reduce((a,p)=>a+p.m,0);
+    const warn = r.expected&&P.length!==r.expected ? `⚠️ Found ${P.length} of ${r.expected} intervals — check the splits`
+      : r.dist&&Math.abs(sm-r.dist)>Math.max(10,r.dist*0.02) ? `⚠️ Splits add up to ${sm.toLocaleString()}m, total says ${r.dist.toLocaleString()}m — a row may be missing` : '';
+    if(warn) setTimeout(()=>{ if(openSheetEl&&openSheetEl.id==='rowSheet'&&pendingParts===P) toast(warn); },1500);
+  }
+  if(pendingParts&&r.isInterval&&!wkInt) setWk(true);   // setWk fills the reps
+  else if(wkInt&&pendingParts&&!repVals.some(Boolean)) partsToReps();
+}
+function renderParts(){
+  const box=document.getElementById('partsBox');
+  const ex=pendingExtra||{}, bits=[ex.watts&&ex.watts+' W', ex.hr&&ex.hr+' bpm', ex.cal&&ex.cal+' cal'].filter(Boolean);
+  if(!pendingParts&&!bits.length){ box.style.display='none'; return; }
+  box.style.display = wkInt&&!bits.length?'none':'block';
+  box.innerHTML=`<label>From the photo <span class="muted">(saved with the row)</span></label>
+    ${bits.length?`<div class="d" style="margin-bottom:6px;">${bits.join(' · ')}</div>`:''}
+    ${pendingParts&&!wkInt?`<div style="font-size:13.5px;line-height:1.7;">${pendingParts.map((p,i)=>`<div class="row-between"><span class="muted">${i+1}. ${p.m.toLocaleString()}m · ${fmtSplit(p.secs)}</span><span><b>${fmtSplit(p.split)}</b>/500${p.rate?' · r'+p.rate:''}</span></div>`).join('')}</div>`:''}`;
+}
+function partsToReps(){
+  const P=pendingParts; if(!P)return;
+  const sameM=P.every(p=>p.m===P[0].m), sameT=P.every(p=>Math.abs(p.secs-P[0].secs)<1);
+  setRepType(sameT&&!sameM?'time':'dist');
+  document.getElementById('i-val').value = sameT&&!sameM? fmtSplit(P[0].secs) : (sameM? P[0].m : '');
+  document.getElementById('i-reps').value=P.length;
+  repVals=P.map(p=>fmtSplit(p.split)); renderRepRows();
+}
 function showRowPhoto(b){
-  pendingPhoto=b;
+  pendingPhoto=b; setParts(null);
   document.getElementById('r-snap').style.display='none';
   document.getElementById('photoPreview').src=URL.createObjectURL(b);
   document.getElementById('photoPreviewWrap').style.display='block';
@@ -1040,11 +1074,70 @@ function parseErg(t){
   if(totals.some(x=>x.tenth)) totals=totals.filter(x=>x.tenth);
   if(totals.length) out.secs=Math.max(...totals.map(x=>x.secs));
   if(!out.secs && splits.length && out.dist) out.secs=Math.round(splits[0].secs*out.dist/500*10)/10;
+  // extras some screens show
+  // [ \t] not \s: never read a number off the next line
+  const wM=t.match(/(\d{2,4})[ \t]*(?:w\b|watts?)/i)||t.match(/watts?[^\d\n]{0,6}(\d{2,4})(?![\d:])/i);
+  const hM=t.match(/(\d{2,3})[ \t]*bpm/i)||t.match(/(?:heart[ \t]*rate|(?<!cal[ \t]*\/[ \t]*)\bhr)[^\d\n]{0,6}(\d{2,3})(?![\d:])/i);
+  const cM=t.match(/(\d{1,4})[ \t]*k?cal(?![ \t]*\/[ \t]*h)/i)||t.match(/\bcal(?:ories)?(?![ \t]*\/[ \t]*h)[^\d\n]{0,6}(\d{1,4})(?![\d:])/i);
+  if(wM&&+wM[1]>=30&&+wM[1]<=1500) out.watts=+wM[1];
+  if(hM&&+hM[1]>=50&&+hM[1]<=230) out.hr=+hM[1];
+  if(cM&&+cM[1]>0) out.cal=+cM[1];
+  // split table (PM5 / ErgZone rows: time · meters · /500 · s/m)
+  const tb=parseErgRows(t);
+  if(tb){ out.parts=tb.parts||undefined; out.isInterval=tb.isInterval; out.expected=tb.expected; out.dist=tb.dist||out.dist; out.secs=tb.secs||out.secs; out.rate=tb.rate||out.rate; }
   return out;
+}
+function parseErgRows(t){
+  const rows=[];
+  t.split('\n').forEach(line=>{
+    const L=line.replace(/\/\s*500\s*m?/gi,' ');
+    // OCR often drops the tenths dot ("1:471" = 1:47.1)
+    const TM=/(?<![\d:])((?:\d{1,2}:)?\d{1,2}:\d{2})(?:\.?(\d))?(?![\d:])(?!\s*[ap]\.?m\b)/gi;
+    const mt=[...L.matchAll(TM)];
+    if(mt.length<2) return;
+    const tm=mt.map(m=>parseTime(m[1])+(m[2]?+m[2]/10:0));
+    const ints=str=>[...str.replace(TM,' ').matchAll(/(?<![\d.])(\d{1,5})(?![\d.])/g)].map(m=>+m[1]);
+    const end0=mt[0].index+mt[0][0].length, start1=mt[1].index, end1=start1+mt[1][0].length;
+    const big=a=>a.filter(n=>n>=100&&n<=50000);
+    // columns run time · meters · /500 · s/m (· watts · cal): meters sit between the two times
+    const m=big(ints(L.slice(end0,start1)))[0]||big(ints(L.slice(0,mt[0].index))).pop()||big(ints(L.slice(end1)))[0]||0;
+    const sp=tm[1];
+    if(!m || sp<60 || sp>240) return;               // not a table row
+    const rc=ints(L.slice(end1)).filter(n=>n>=14&&n<=50);
+    rows.push({t:tm[0], sp, m, rate:rc.length?rc[0]:0, total:/total|summary|avg|overall/i.test(line)});
+  });
+  if(!rows.length) return null;
+  if(rows.length===1) return {dist:rows[0].m, secs:rows[0].t, rate:rows[0].rate, parts:null}; // summary line only
+  const growsIn=(B,k)=>B.length>1 && B.every((r,i)=>i===0||r[k]-B[i-1][k]>=B[0][k]*0.5);
+  let sum=rows.find(r=>r.total)||null, body=rows.filter(r=>r!==sum);
+  // erg screens put the overall average on the top row and each interval/split below it —
+  // unless the photo is cropped: a "summary" shorter than its splits is just the first split
+  if(!sum){
+    sum=rows[0]; body=rows.slice(1);
+    const cropped = growsIn(rows,'m')                                        // 500, 1000, 1500… cumulative, no summary
+      || (body.length===1 && Math.abs(sum.t-body[0].t)>1)                     // two splits, not summary + split
+      || (!growsIn(body,'m') && sum.m < body.reduce((a,r)=>a+r.m,0)*0.9);     // summary shorter than its splits
+    if(cropped){ sum=null; body=rows; }
+  }
+  if(!body.length) return null;
+  const grows=k=>growsIn(body,k);
+  const cumM=grows('m')&&(!sum||Math.abs(body[body.length-1].m-sum.m)<=5);   // PM5 split view: 500, 1000, 1500…
+  const cumT=grows('t')&&(!sum||Math.abs(body[body.length-1].t-sum.t)<=2);
+  const parts=body.map((r,i)=>({
+    m: cumM? r.m-(i?body[i-1].m:0) : r.m,
+    secs: Math.round((cumT? r.t-(i?body[i-1].t:0) : r.t)*10)/10,
+    split: r.sp, rate: r.rate||null,
+  }));
+  const dist=sum? sum.m : parts.reduce((a,p)=>a+p.m,0);
+  const secs=sum? sum.t : Math.round(parts.reduce((a,p)=>a+p.secs,0)*10)/10;
+  const xm=t.match(/\b(\d{1,2})\s*[x×]\s*\d/i);
+  const rs=parts.filter(p=>p.rate);
+  const rate=sum&&sum.rate || (rs.length? Math.round(rs.reduce((a,p)=>a+p.rate,0)/rs.length) : 0);
+  return {dist, secs, rate, parts, expected: xm?+xm[1]:0, isInterval:/\b\d{1,2}\s*[x×]\s*\d|\brest\b|\d\s*r\b/i.test(t)};
 }
 function fmtClock(secs){ return fmtSplit(secs); }
 async function readErg(auto){
-  if(!pendingPhoto || (auto && wkInt))return; // OCR fills one-piece fields only
+  if(!pendingPhoto)return;
   const btn=document.getElementById('ocrBtn'), photo=pendingPhoto;
   btn.disabled=true; btn.textContent='🔍 Reading the numbers…';
   try{
@@ -1052,10 +1145,9 @@ async function readErg(auto){
     const {data:{text}}=await w.recognize(photo);
     if(photo!==pendingPhoto || !openSheetEl || openSheetEl.id!=='rowSheet')return;
     const r=parseErg(text);
-    // auto-read never overwrites what he already typed; the button does
-    const fill=(id,v)=>{ const el=document.getElementById(id); if(v&&(!auto||!el.value)) el.value=v; };
-    fill('r-dist',r.dist); fill('r-time',r.secs&&fmtClock(r.secs)); fill('r-rate',r.rate);
-    calcSplit();
+    ocrFill(r,!auto);
+    if(!auto&&r.parts) repVals=[];
+    setParts(r,text.slice(0,2000));
     toast(r.dist||r.secs?'✅ Got it — double-check the numbers':'🤔 Couldn\'t read it — type them in');
   }catch(e){ if(photo===pendingPhoto && openSheetEl && openSheetEl.id==='rowSheet') toast('📶 Needs internet to read photos'); }
   finally{ if(photo===pendingPhoto){ btn.disabled=false; btn.textContent='🔍 Read numbers from photo'; } }
@@ -1090,15 +1182,22 @@ async function readSnap(sn,b){
     const {data:{text}}=await w.recognize(b);
     const r=parseErg(text);
     if(!state.snaps.includes(sn) || !(r.dist||r.secs)) return;
+    r.raw=text.slice(0,2000);
     sn.ocr=r; persist(); renderAll();
-    toast('🔍 Read '+[r.dist&&r.dist.toLocaleString()+'m', r.secs&&fmtClock(r.secs), r.rate&&'r'+r.rate].filter(Boolean).join(' · '));
+    toast('🔍 Read '+ocrText(r));
   }catch(e){} // offline — it gets read when he logs it
   finally{ snapReads.delete(sn.id); }
 }
-function ocrText(r){ return [r.dist&&r.dist.toLocaleString()+' m', r.secs&&fmtClock(r.secs), r.rate&&'r'+r.rate].filter(Boolean).join(' · '); }
-function fillOcr(r){ // only empty fields — never overwrite what he typed
-  const f=(id,v)=>{ const el=document.getElementById(id); if(v&&!el.value) el.value=v; };
-  f('r-dist',r.dist); f('r-time',r.secs&&fmtClock(r.secs)); f('r-rate',r.rate); calcSplit();
+function ocrText(r){ return [r.dist&&r.dist.toLocaleString()+' m', r.secs&&fmtClock(r.secs), r.rate&&'r'+r.rate, r.parts&&r.parts.length+' splits'].filter(Boolean).join(' · '); }
+function fillOcr(r){ ocrFill(r,false); setParts(r); }
+// fill from a photo: never overwrite what he typed (unless he pressed Read), but a newer photo replaces an older photo's numbers
+let ocrVals={};
+function ocrFill(r,force){
+  [['r-dist',r.dist],['r-time',r.secs&&fmtClock(r.secs)],['r-rate',r.rate]].forEach(([id,v])=>{
+    const el=document.getElementById(id);
+    if(v&&(force||!el.value||el.value===ocrVals[id])){ el.value=v; ocrVals[id]=String(v); }
+  });
+  calcSplit();
 }
 async function logSnap(id){
   const sn=state.snaps.find(x=>x.id===id); if(!sn)return;
@@ -1118,7 +1217,10 @@ function dropSnap(id,keepPhoto){
 }
 function discardSnap(id){ if(confirm('Delete this photo?')){ dropSnap(id,false); renderAll(); } }
 function clearPhoto(){
-  pendingPhoto=null;
+  pendingPhoto=null; if(document.getElementById('partsBox')) setParts(null);
+  // numbers that came from the removed photo go with it
+  Object.entries(ocrVals).forEach(([id,v])=>{ const el=document.getElementById(id); if(el&&el.value===v) el.value=''; });
+  ocrVals={}; if(document.getElementById('r-split')) calcSplit();
   document.getElementById('r-snap').style.display='none';
   const ob=document.getElementById('ocrBtn'); ob.disabled=false; ob.textContent='🔍 Read numbers from photo';
   document.getElementById('ocrBtn').style.display='none';
@@ -1176,6 +1278,9 @@ function saveRow(){
   const entry={
     id:sn?sn.id:Date.now(), ts:sn?sn.ts:Date.now(), date:sn?sn.date:TODAY, type:rowType,
     dist, secs, timeStr, split, iv, by: iv||!byPicked?null:pieceBy,
+    parts: !iv&&pendingParts? pendingParts : null,
+    watts: pendingExtra&&pendingExtra.watts||null, hr: pendingExtra&&pendingExtra.hr||null, cal: pendingExtra&&pendingExtra.cal||null,
+    ocr: pendingExtra&&pendingExtra.ocr||null,
     rate:Number(document.getElementById('r-rate').value)||null,
     boat: rowType==='water'?rowBoat:null,
     feel:rowFeel, notes:document.getElementById('r-notes').value.trim(),
@@ -1276,7 +1381,10 @@ function delFood(id){ if(confirm('Delete this entry?')){state.foods=state.foods.
 /* =================== RENDER =================== */
 function ivLabel(iv){ return iv.n+' × '+(iv.kind==='dist'? iv.val.toLocaleString()+'m' : fmtSplit(iv.val)); }
 function ivSplitsHTML(r){
-  return r.iv? `<div class="d" style="margin-top:3px;">Splits: ${r.iv.splits.map(sp=>sp?fmtSplit(sp):'—').join(' · ')}</div>`:'';
+  const ex=[r.watts&&r.watts+' W', r.hr&&r.hr+' bpm', r.cal&&r.cal+' cal'].filter(Boolean).join(' · ');
+  const sp = r.iv? r.iv.splits.map(sp=>sp?fmtSplit(sp):'—').join(' · ')
+          : r.parts? r.parts.map(p=>fmtSplit(p.split)+(p.rate?' r'+p.rate:'')).join(' · ') : '';
+  return (sp?`<div class="d" style="margin-top:3px;">Splits: ${sp}</div>`:'')+(ex?`<div class="d" style="margin-top:3px;">${ex}</div>`:'');
 }
 function rowSummary(r){
   const parts=[];
