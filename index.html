@@ -246,6 +246,8 @@
   .b-lift{background:var(--good);color:#04321f;}
   .b-row{background:var(--row);color:#fff;}
   .b-eod{background:var(--card2);border:2px solid var(--accent2);min-height:96px;margin-bottom:18px;}
+  a.bigbtn{text-decoration:none;}
+  .b-season{background:var(--card2);border:2px solid var(--accent);min-height:96px;margin-bottom:18px;color:var(--accent);}
   .counter{display:flex;align-items:center;justify-content:center;gap:22px;margin:10px 0 18px;}
   .counter button{width:84px;height:84px;border-radius:50%;font-size:44px;font-weight:800;line-height:1;}
   .counter .n{font-size:72px;font-weight:800;min-width:90px;text-align:center;line-height:1;}
@@ -286,6 +288,7 @@
         <button class="bigbtn b-row" onclick="openRowChoice()"><span class="e">🚣</span>Row<span class="s" id="bb-row">log or snap</span></button>
       </div>
       <button class="bigbtn b-eod" onclick="go('eod')"><span class="e">🌙</span>End of day<span class="s" id="bb-eod">nothing to log yet</span></button>
+      <a class="bigbtn b-season" href="https://jmccarthy-max.github.io/row-log/season.html"><span class="e">🏆</span>Season<span class="s">OARS results &amp; head-to-head</span></a>
       <input type="file" id="snapInput" accept="image/*" capture="environment" style="display:none;" onchange="snapPicked(this)">
       <input type="file" id="snapLib" accept="image/*" style="display:none;" onchange="snapPicked(this)">
       <button class="btn ghost" onclick="go('home')" style="padding:16px;font-size:17px;">🏠 Home — stats, water, today's activity</button>
